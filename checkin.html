@@ -6,9 +6,8 @@
   <title>窓口受付 | まちなかレンタサイクル</title>
   <!-- Tailwind CSS CDN -->
   <script src="https://cdn.tailwindcss.com"></script>
-  <!-- Firebase SDK (Auth & Realtime Database) -->
+  <!-- Firebase SDK (Realtime Database) -->
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
   <!-- html5-qrcode CDN (会員カードQRスキャン用) -->
   <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
@@ -42,16 +41,12 @@
             <div class="flex flex-wrap items-center gap-1.5">
               <h1 class="text-sm sm:text-lg font-bold text-slate-900 leading-tight truncate">まちなかレンタサイクル</h1>
               <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 shrink-0">窓口受付</span>
-              <span id="sync-mode-badge" class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-600 shrink-0">ローカルテスト</span>
+              <span id="sync-mode-badge" class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-600 shrink-0">接続待機</span>
             </div>
             <p class="text-[10px] sm:text-[11px] text-slate-500 leading-tight truncate">都城市まちなか交流センター（個人情報ゼロ設計）</p>
           </div>
         </div>
         <div class="flex items-center gap-2 sm:gap-3 shrink-0">
-          <button type="button" id="btn-staff-logout" onclick="handleStaffLogout()"
-            class="hidden px-2.5 py-1.5 rounded-lg border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-600 text-[11px] sm:text-xs font-semibold transition-colors">
-            ログアウト
-          </button>
           <div class="text-right">
             <div id="header-clock" class="text-xs sm:text-sm font-semibold text-slate-700 tabular-nums">--:--:--</div>
             <div id="header-date" class="text-[10px] sm:text-xs text-slate-400">----/--/--</div>
@@ -61,37 +56,7 @@
     </div>
   </header>
 
-  <!-- 社員ログイン画面（Firebase設定時・未ログイン時はメイン画面をロック） -->
-  <div id="staff-auth-overlay" class="hidden flex-1 flex items-center justify-center p-4">
-    <div class="bg-white rounded-3xl max-w-md w-full p-6 sm:p-8 shadow-sm border border-slate-200 space-y-5">
-      <div class="text-center space-y-1.5">
-        <div class="w-12 h-12 rounded-2xl bg-emerald-600 text-white flex items-center justify-center mx-auto shadow-sm">
-          <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-        </div>
-        <h2 class="text-xl font-bold text-slate-900">窓口スタッフ ログイン</h2>
-        <p class="text-xs text-slate-500">社員アカウントでログインすると、全端末とリアルタイム同期されます。</p>
-      </div>
-      <form id="staff-login-form" onsubmit="handleStaffLogin(event)" class="space-y-4">
-        <div>
-          <label for="login-email" class="block text-xs font-bold text-slate-700 mb-1">メールアドレス</label>
-          <input type="email" id="login-email" required autocomplete="username" placeholder="staff@example.com"
-            class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200 outline-none text-sm">
-        </div>
-        <div>
-          <label for="login-password" class="block text-xs font-bold text-slate-700 mb-1">パスワード</label>
-          <input type="password" id="login-password" required autocomplete="current-password" placeholder="••••••••"
-            class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200 outline-none text-sm">
-        </div>
-        <p id="login-error-msg" class="hidden text-xs font-semibold text-rose-600 bg-rose-50 border border-rose-200 rounded-xl p-3"></p>
-        <button type="submit" id="btn-staff-login-submit"
-          class="w-full py-3 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm shadow-sm transition-colors">
-          ログインして窓口受付を開く
-        </button>
-      </form>
-    </div>
-  </div>
-
-  <!-- メインコンテンツ -->
+  <!-- メインコンテンツ（ログイン不要で即利用可能） -->
   <main id="app-main" class="flex-1 max-w-2xl w-full mx-auto px-3 sm:px-6 py-5 sm:py-8 space-y-5">
 
     <!-- 顧客番号入力 & 会員カードQRスキャン -->
@@ -130,12 +95,12 @@
       <div class="pt-3 border-t border-slate-100 space-y-3">
         <div class="flex flex-wrap items-center gap-2.5">
           <button type="button" id="btn-start-qr-scan" onclick="startCameraQrScan()"
-            class="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-semibold text-xs sm:text-sm shadow-xs transition-colors">
+            class="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-semibold text-xs sm:text-sm shadow-sm transition-colors">
             <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/></svg>
             カメラで会員QRを読み取る
           </button>
           <button type="button" id="btn-stop-qr-scan" onclick="stopCameraQrScan()"
-            class="hidden inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-semibold text-xs sm:text-sm shadow-xs transition-colors">
+            class="hidden inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-semibold text-xs sm:text-sm shadow-sm transition-colors">
             カメラを停止
           </button>
         </div>
@@ -317,7 +282,7 @@
   </footer>
 
   <!-- 利用規約全文モーダル -->
-  <div id="terms-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-slate-900/60 backdrop-blur-xs">
+  <div id="terms-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-slate-900/60 backdrop-blur-sm">
     <div class="bg-white rounded-2xl max-w-2xl w-full max-h-[88vh] flex flex-col shadow-xl border border-slate-200 overflow-hidden">
       <div class="flex items-center justify-between px-5 py-4 border-b border-slate-200 bg-slate-50 shrink-0">
         <div>
@@ -361,7 +326,7 @@
   </div>
 
   <!-- チェックイン完了モーダル -->
-  <div id="checkin-success-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-xs">
+  <div id="checkin-success-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm">
     <div class="bg-white rounded-2xl max-w-sm w-full p-6 shadow-xl border border-slate-200 text-center space-y-4">
       <div class="w-14 h-14 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center mx-auto">
         <svg xmlns="http://www.w3.org/2000/svg" class="w-8 h-8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
@@ -386,18 +351,16 @@
 
   <script>
     // ==========================================
-    // ★GitHub Pages 公開用 Firebase 設定（3ファイル共通）★
-    // Firebase コンソールの「プロジェクトの設定」からコピーした値を記入してください
-    // 未記入のままの場合はローカルテストモード（同一ブラウザ内連動）で動作します
+    // GitHub Pages 公開用 Firebase 設定（3ファイル共通）
     // ==========================================
     const FIREBASE_CONFIG = {
-      apiKey: "",
-      authDomain: "",
-      databaseURL: "",
-      projectId: "",
-      storageBucket: "",
-      messagingSenderId: "",
-      appId: ""
+      apiKey: "AIzaSyBi9JvTsoqu9cQPwNe5eYXH6bmWMuF-XM0",
+      authDomain: "machinaka-rentacycle.firebaseapp.com",
+      databaseURL: "https://machinaka-rentacycle-default-rtdb.asia-southeast1.firebasedatabase.app",
+      projectId: "machinaka-rentacycle",
+      storageBucket: "machinaka-rentacycle.firebasestorage.app",
+      messagingSenderId: "905615130969",
+      appId: "1:905615130969:web:3ff0523341362208314c48"
     };
 
     const STORAGE_KEY = 'machinaka_rentacycle_v4_nopii';
@@ -424,38 +387,51 @@
       history: []
     };
 
+    function deepClone(obj) {
+      return typeof structuredClone === 'function' ? structuredClone(obj) : JSON.parse(JSON.stringify(obj));
+    }
+
+    function createSyncChannel() {
+      try {
+        return typeof BroadcastChannel !== 'undefined' ? new BroadcastChannel('machinaka_rentacycle_sync') : null;
+      } catch (e) {
+        return null;
+      }
+    }
+
     let state = loadLocalState();
     let html5QrScanner = null;
     let isScanningCamera = false;
     let toastTimer = null;
-    let firebaseAuth = null;
     let firebaseDb = null;
-    let currentUser = null;
-    let staffDataRef = null;
-    const syncChannel = typeof BroadcastChannel !== 'undefined' ? new BroadcastChannel('machinaka_rentacycle_sync') : null;
+    const syncChannel = createSyncChannel();
 
     function isFirebaseConfigured() {
-      return Boolean(FIREBASE_CONFIG.apiKey && FIREBASE_CONFIG.databaseURL);
+      return Boolean(FIREBASE_CONFIG.databaseURL && FIREBASE_CONFIG.databaseURL.trim());
+    }
+
+    function normalizeBikes(bikesRaw) {
+      const list = Array.isArray(bikesRaw) ? bikesRaw : (bikesRaw ? Object.values(bikesRaw) : DEFAULT_STATE.bikes);
+      return list.map(b => ({
+        id: b.id,
+        name: b.name,
+        type: b.type,
+        status: b.status === 'rented' && b.rental ? 'rented' : 'available',
+        rental: b.status === 'rented' && b.rental ? b.rental : null
+      }));
     }
 
     function normalizeState(raw) {
-      if (!raw || typeof raw !== 'object') return structuredClone(DEFAULT_STATE);
-      const bikesRaw = Array.isArray(raw.bikes) ? raw.bikes : (raw.bikes ? Object.values(raw.bikes) : DEFAULT_STATE.bikes);
+      if (!raw || typeof raw !== 'object') return deepClone(DEFAULT_STATE);
       const membersRaw = Array.isArray(raw.members) ? raw.members : (raw.members ? Object.values(raw.members) : []);
       const historyRaw = Array.isArray(raw.history) ? raw.history : (raw.history ? Object.values(raw.history) : []);
 
       return {
-        bikes: bikesRaw.map(b => ({
-          id: b.id,
-          name: b.name,
-          type: b.type,
-          status: b.status === 'rented' && b.rental ? 'rented' : 'available',
-          rental: b.status === 'rented' && b.rental ? b.rental : null
-        })),
+        bikes: normalizeBikes(raw.bikes),
         members: membersRaw,
         pricing: {
-          normal:   raw.pricing?.normal   || structuredClone(DEFAULT_STATE.pricing.normal),
-          electric: raw.pricing?.electric || structuredClone(DEFAULT_STATE.pricing.electric),
+          normal:   raw.pricing?.normal   || deepClone(DEFAULT_STATE.pricing.normal),
+          electric: raw.pricing?.electric || deepClone(DEFAULT_STATE.pricing.electric),
           overnight: typeof raw.pricing?.overnight === 'number' ? raw.pricing.overnight : DEFAULT_STATE.pricing.overnight
         },
         history: historyRaw
@@ -465,43 +441,40 @@
     function loadLocalState() {
       try {
         const raw = localStorage.getItem(STORAGE_KEY);
-        if (!raw) return structuredClone(DEFAULT_STATE);
+        if (!raw) return deepClone(DEFAULT_STATE);
         return normalizeState(JSON.parse(raw));
       } catch (e) {
-        return structuredClone(DEFAULT_STATE);
+        return deepClone(DEFAULT_STATE);
       }
     }
 
-    function buildPublicPayload() {
-      return {
-        updatedAt: Date.now(),
-        pricing: state.pricing,
-        bikes: state.bikes.map(b => ({ id: b.id, name: b.name, type: b.type, status: b.status }))
-      };
+    function saveLocalCache(data) {
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+      } catch (e) {}
     }
 
     function saveState() {
+      saveLocalCache(state);
       try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
         if (syncChannel) syncChannel.postMessage({ type: 'state_updated', at: Date.now() });
+      } catch (e) {}
 
-        if (isFirebaseConfigured() && firebaseDb && currentUser) {
-          const updates = {
-            staff_data: { ...state, updatedAt: Date.now() },
-            public_status: buildPublicPayload()
-          };
-          firebaseDb.ref().update(updates).catch((err) => {
-            console.error('Firebase保存エラー:', err);
-            showToast('クラウド同期の保存に失敗しました', 'error');
-          });
-        }
-      } catch (e) {
-        showToast('データの保存に失敗しました', 'error');
+      if (isFirebaseConfigured() && firebaseDb) {
+        const updates = {
+          'staff_data/bikes': state.bikes,
+          'public_status/bikes': state.bikes.map(b => ({ id: b.id, name: b.name, type: b.type, status: b.status })),
+          'public_status/updatedAt': Date.now()
+        };
+        firebaseDb.ref().update(updates).catch((err) => {
+          console.error('Firebase保存エラー:', err);
+          showToast('クラウド同期の保存に失敗しました（Firebaseルール設定を確認してください）', 'error');
+        });
       }
     }
 
     // ------------------------------------------
-    // Firebase 社員認証 & リアルタイム双方向同期
+    // Firebase リアルタイム双方向同期（ログイン不要）
     // ------------------------------------------
     function setSyncBadge(mode) {
       const badge = document.getElementById('sync-mode-badge');
@@ -518,108 +491,66 @@
       }
     }
 
-    function initFirebaseAuthAndSync() {
+    function initFirebaseSync() {
+      renderCheckinView();
+
       if (!isFirebaseConfigured() || typeof firebase === 'undefined') {
         setSyncBadge('local');
-        document.getElementById('staff-auth-overlay').classList.add('hidden');
-        document.getElementById('app-main').classList.remove('hidden');
-        renderCheckinView();
         return;
       }
 
-      if (!firebase.apps.length) {
-        firebase.initializeApp(FIREBASE_CONFIG);
-      }
-      firebaseAuth = firebase.auth();
-      firebaseDb = firebase.database();
-
-      document.getElementById('app-main').classList.add('hidden');
-      document.getElementById('staff-auth-overlay').classList.remove('hidden');
-
-      firebaseAuth.onAuthStateChanged((user) => {
-        currentUser = user;
-        if (user) {
-          document.getElementById('staff-auth-overlay').classList.add('hidden');
-          document.getElementById('app-main').classList.remove('hidden');
-          document.getElementById('btn-staff-logout').classList.remove('hidden');
-          setSyncBadge('cloud_wait');
-          startStaffRealtimeSync();
-        } else {
-          stopStaffRealtimeSync();
-          if (isScanningCamera) stopCameraQrScan();
-          document.getElementById('app-main').classList.add('hidden');
-          document.getElementById('btn-staff-logout').classList.add('hidden');
-          document.getElementById('staff-auth-overlay').classList.remove('hidden');
-          setSyncBadge('local');
-        }
-      });
-    }
-
-    function startStaffRealtimeSync() {
-      if (!firebaseDb) return;
-      stopStaffRealtimeSync();
-      staffDataRef = firebaseDb.ref('staff_data');
-      staffDataRef.on('value', (snapshot) => {
-        setSyncBadge('cloud_ok');
-        const val = snapshot.val();
-        if (!val) {
-          state = structuredClone(DEFAULT_STATE);
-          saveState();
-        } else {
-          state = normalizeState(val);
-          localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-        }
-        renderCheckinView();
-      }, (err) => {
-        console.error('Firebase購読エラー:', err);
-        showToast('同期データの取得に失敗しました（権限を確認してください）', 'error');
-      });
-    }
-
-    function stopStaffRealtimeSync() {
-      if (staffDataRef) {
-        staffDataRef.off();
-        staffDataRef = null;
-      }
-    }
-
-    async function handleStaffLogin(event) {
-      event.preventDefault();
-      const email = document.getElementById('login-email').value.trim();
-      const password = document.getElementById('login-password').value;
-      const errEl = document.getElementById('login-error-msg');
-      const submitBtn = document.getElementById('btn-staff-login-submit');
-
-      errEl.classList.add('hidden');
-      submitBtn.disabled = true;
-      submitBtn.textContent = 'ログイン中...';
-
       try {
-        await firebaseAuth.signInWithEmailAndPassword(email, password);
-        document.getElementById('staff-login-form').reset();
-        showToast('ログインしました');
-      } catch (err) {
-        errEl.textContent = 'メールアドレスまたはパスワードが正しくありません。';
-        errEl.classList.remove('hidden');
-      } finally {
-        submitBtn.disabled = false;
-        submitBtn.textContent = 'ログインして窓口受付を開く';
-      }
-    }
+        if (!firebase.apps.length) {
+          firebase.initializeApp(FIREBASE_CONFIG);
+        }
+        firebaseDb = firebase.database();
+        setSyncBadge('cloud_wait');
 
-    async function handleStaffLogout() {
-      if (!firebaseAuth) return;
-      try {
-        await firebaseAuth.signOut();
-        showToast('ログアウトしました');
+        firebaseDb.ref('.info/connected').on('value', (snap) => {
+          setSyncBadge(snap.val() === true ? 'cloud_ok' : 'cloud_wait');
+        });
+
+        // 車両ステータスをリアルタイム購読
+        firebaseDb.ref('staff_data/bikes').on('value', (snap) => {
+          const val = snap.val();
+          if (val) {
+            state.bikes = normalizeBikes(val);
+            saveLocalCache(state);
+            renderCheckinView();
+          }
+        }, (err) => {
+          console.error('車両データ購読エラー:', err);
+          showToast('同期データの取得に失敗しました（Firebaseルール設定を確認してください）', 'error');
+        });
+
+        // 会員番号リストをリアルタイム購読（読み取り専用）
+        firebaseDb.ref('staff_data/members').on('value', (snap) => {
+          const val = snap.val();
+          if (val) {
+            state.members = Array.isArray(val) ? val : Object.values(val);
+            saveLocalCache(state);
+          }
+        });
+
+        // 料金表をリアルタイム購読（読み取り専用）
+        firebaseDb.ref('staff_data/pricing').on('value', (snap) => {
+          const val = snap.val();
+          if (val && val.normal && val.electric) {
+            state.pricing = {
+              normal: val.normal,
+              electric: val.electric,
+              overnight: typeof val.overnight === 'number' ? val.overnight : DEFAULT_STATE.pricing.overnight
+            };
+            saveLocalCache(state);
+            renderCheckinView();
+          }
+        });
       } catch (e) {
-        showToast('ログアウトに失敗しました', 'error');
+        console.error('Firebase初期化エラー:', e);
+        setSyncBadge('local');
       }
     }
 
-    // ------------------------------------------
-    // ユーティリティ
-    // ------------------------------------------
     function formatDateTime(ts) {
       const d = new Date(ts);
       const y = d.getFullYear();
@@ -678,9 +609,6 @@
       document.getElementById('terms-modal').classList.add('hidden');
     }
 
-    // ------------------------------------------
-    // 顧客番号照会 & QRスキャン
-    // ------------------------------------------
     function handleCustomerIdKeydown(event) {
       if (event.key === 'Enter') {
         event.preventDefault();
@@ -828,9 +756,6 @@
       stopBtn.classList.add('hidden');
     }
 
-    // ------------------------------------------
-    // フォーム描画 & 送信
-    // ------------------------------------------
     function renderCheckinView() {
       const container = document.getElementById('checkin-bike-options');
       const noBikesMsg = document.getElementById('checkin-no-bikes');
@@ -1018,7 +943,6 @@
       showToast('チェックインを記録しました');
     }
 
-    // 同一ブラウザ内での即時連動（ローカルテスト時）
     window.addEventListener('storage', (e) => {
       if (!isFirebaseConfigured() && e.key === STORAGE_KEY) {
         state = loadLocalState();
@@ -1038,7 +962,7 @@
     window.addEventListener('DOMContentLoaded', () => {
       updateClock();
       setInterval(updateClock, 1000);
-      initFirebaseAuthAndSync();
+      initFirebaseSync();
     });
   </script>
 </body>
