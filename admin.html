@@ -444,6 +444,59 @@
     let staffDataRef = null;
     const syncChannel = createSyncChannel();
 
+    function stopStaffRealtimeSync() {
+      try {
+        if (staffDataRef) {
+          staffDataRef.off();
+          staffDataRef = null;
+        }
+      } catch (e) {
+        console.warn('リアルタイム同期の解除中にエラーが発生しました:', e);
+      }
+    }
+
+    function startStaffRealtimeSync(emailText = '') {
+      stopStaffRealtimeSync();
+
+      if (!isFirebaseConfigured() || !firebaseDb || !currentUser) {
+        renderAdminView();
+        return;
+      }
+
+      try {
+        staffDataRef = firebaseDb.ref('staff_data');
+        staffDataRef.on('value', (snapshot) => {
+          try {
+            const remoteVal = snapshot.val();
+            if (remoteVal) {
+              state = normalizeState(remoteVal);
+              saveLocalCache(state);
+            } else {
+              // クラウド上にまだ staff_data がない場合は現在の初期データを送信して初期化
+              const updates = {
+                staff_data: { ...state, updatedAt: Date.now() },
+                public_status: buildPublicPayload()
+              };
+              firebaseDb.ref().update(updates).catch((initErr) => {
+                console.error('初期データ同期エラー:', initErr);
+              });
+            }
+            setSyncStatusUI('cloud_ok', emailText);
+            renderAdminView();
+          } catch (renderErr) {
+            console.error('同期データの反映エラー:', renderErr);
+          }
+        }, (err) => {
+          console.error('Firebaseリアルタイム購読エラー:', err);
+          setSyncStatusUI('local');
+          showToast('クラウド同期の購読に失敗しました（ルール設定をご確認ください）', 'error');
+        });
+      } catch (e) {
+        console.error('リアルタイム同期の開始エラー:', e);
+        setSyncStatusUI('local');
+      }
+    }
+
     function isFirebaseConfigured() {
       return Boolean(FIREBASE_CONFIG.apiKey && FIREBASE_CONFIG.databaseURL);
     }
