@@ -1,0 +1,621 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>まちなかレンタサイクル 利用状況 | 都城市まちなか交流センター</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Firebase SDK (Realtime Database 閲覧専用) -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+  <!-- Google Fonts (Inter & Noto Sans JP) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['"Inter"', '"Noto Sans JP"', 'sans-serif'],
+          }
+        }
+      }
+    }
+  </script>
+</head>
+<body class="bg-slate-50 text-slate-800 min-h-screen flex flex-col antialiased selection:bg-emerald-200 selection:text-emerald-900">
+
+  <!-- ヘッダー（お客様専用・閲覧専用） -->
+  <header class="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-sm">
+    <div class="max-w-4xl mx-auto px-3 sm:px-6">
+      <div class="flex items-center justify-between h-14 sm:h-16 gap-2">
+        <div class="flex items-center gap-2 sm:gap-2.5 min-w-0">
+          <div class="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-emerald-600 text-white flex items-center justify-center shadow-sm shrink-0">
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 sm:w-5 sm:h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="18.5" cy="17.5" r="3.5"/><circle cx="5.5" cy="17.5" r="3.5"/><circle cx="15" cy="5" r="1"/><path d="M12 17.5V14l-3-3 4-3 2 3h2"/>
+            </svg>
+          </div>
+          <div class="min-w-0">
+            <h1 class="text-sm sm:text-lg font-bold text-slate-900 leading-tight truncate">まちなかレンタサイクル</h1>
+            <p class="text-[10px] sm:text-[11px] text-slate-500 leading-tight truncate">都城市まちなか交流センター</p>
+          </div>
+        </div>
+        <div class="text-right shrink-0">
+          <div id="header-clock" class="text-xs sm:text-sm font-semibold text-slate-700 tabular-nums">--:--:--</div>
+          <div id="header-date" class="text-[10px] sm:text-xs text-slate-400">----/--/--</div>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- メインコンテンツ（スマホ完全レスポンシブ） -->
+  <main class="flex-1 max-w-4xl w-full mx-auto px-3 sm:px-6 py-4 sm:py-8 space-y-4 sm:space-y-6">
+
+    <!-- サマリーカード（空き台数表示） -->
+    <div class="bg-white rounded-2xl p-4 sm:p-6 shadow-sm border border-slate-200">
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 mb-4 sm:mb-5">
+        <div>
+          <div class="flex flex-wrap items-center gap-2 mb-1">
+            <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] sm:text-xs font-semibold bg-emerald-50 text-emerald-700">
+              <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+              リアルタイム空き状況
+            </span>
+            <span id="customer-sync-badge" class="hidden inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-sky-50 text-sky-700 border border-sky-200">
+              ライブ自動更新中
+            </span>
+          </div>
+          <h2 class="text-lg sm:text-2xl font-bold text-slate-900">現在の貸出状況</h2>
+        </div>
+        <div class="flex flex-col sm:items-end gap-1">
+          <div class="text-xs text-slate-500 bg-slate-50 sm:bg-transparent px-3 py-2 sm:p-0 rounded-xl border sm:border-0 border-slate-100">
+            利用時間 <strong class="text-slate-800">9:00〜20:00</strong>（最終貸出 <strong class="text-slate-800">17:00</strong>）
+          </div>
+          <div id="last-updated-label" class="text-[11px] text-slate-400 tabular-nums px-1 sm:px-0">自動更新待機中</div>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+        <!-- 電動自転車サマリー -->
+        <div class="rounded-2xl p-4 sm:p-5 bg-gradient-to-br from-emerald-50 to-teal-50/70 border border-emerald-200/80 flex items-center justify-between gap-3">
+          <div class="min-w-0">
+            <div class="flex items-center gap-1.5 text-emerald-800 font-bold text-base sm:text-lg">
+              <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-emerald-600 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+              <span>電動自転車</span>
+            </div>
+            <p class="text-xs text-emerald-700/90 mt-1 leading-snug" id="customer-electric-rate">4時間まで --円〜</p>
+            <p class="text-[11px] text-rose-600 font-semibold mt-1">※高校生以上（中学生以下不可）</p>
+          </div>
+          <div class="text-right shrink-0 bg-white/80 rounded-xl px-3.5 py-2 border border-emerald-200/70">
+            <div class="text-[11px] font-semibold text-emerald-700">空き</div>
+            <div class="flex items-baseline justify-end gap-0.5">
+              <span id="summary-electric-avail" class="text-3xl sm:text-5xl font-extrabold text-emerald-700 tabular-nums leading-none">3</span>
+              <span class="text-sm sm:text-lg font-semibold text-emerald-600/80">/3</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- 普通自転車サマリー -->
+        <div class="rounded-2xl p-4 sm:p-5 bg-gradient-to-br from-sky-50 to-indigo-50/70 border border-sky-200/80 flex items-center justify-between gap-3">
+          <div class="min-w-0">
+            <div class="flex items-center gap-1.5 text-sky-900 font-bold text-base sm:text-lg">
+              <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-sky-600 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18.5" cy="17.5" r="3.5"/><circle cx="5.5" cy="17.5" r="3.5"/><circle cx="15" cy="5" r="1"/><path d="M12 17.5V14l-3-3 4-3 2 3h2"/></svg>
+              <span>普通自転車</span>
+            </div>
+            <p class="text-xs text-sky-700/90 mt-1 leading-snug" id="customer-normal-rate">4時間まで --円〜</p>
+            <p class="text-[11px] text-sky-700/80 mt-1">※中学生以上（中学生は保護者名必要）</p>
+          </div>
+          <div class="text-right shrink-0 bg-white/80 rounded-xl px-3.5 py-2 border border-sky-200/70">
+            <div class="text-[11px] font-semibold text-sky-700">空き</div>
+            <div class="flex items-baseline justify-end gap-0.5">
+              <span id="summary-normal-avail" class="text-3xl sm:text-5xl font-extrabold text-sky-700 tabular-nums leading-none">2</span>
+              <span class="text-sm sm:text-lg font-semibold text-sky-600/80">/2</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 各車両のステータス一覧 -->
+    <div class="space-y-2.5 sm:space-y-3">
+      <h3 class="text-sm sm:text-lg font-bold text-slate-800 px-1">車両ごとの詳細ステータス</h3>
+      <div id="customer-bike-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5 sm:gap-4">
+        <!-- JSで動的生成 -->
+      </div>
+    </div>
+
+    <!-- ご利用料金表（スマホは横スクロール不要のカード表示 / PCはテーブル表示） -->
+    <div class="bg-white rounded-2xl p-4 sm:p-6 shadow-sm border border-slate-200 space-y-4">
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+        <h3 class="text-base sm:text-lg font-bold text-slate-900">ご利用料金表（前払い制）</h3>
+        <span class="self-start sm:self-auto text-[11px] sm:text-xs font-semibold px-2.5 py-1 rounded-full bg-amber-50 text-amber-800 border border-amber-200">
+          前払い制・早期返却時の返金不可
+        </span>
+      </div>
+
+      <!-- スマホ向け料金カード -->
+      <div id="customer-pricing-mobile" class="sm:hidden space-y-3"></div>
+
+      <!-- PC・タブレット向け料金テーブル -->
+      <div class="hidden sm:block overflow-x-auto">
+        <table class="w-full text-sm text-left border-collapse">
+          <thead>
+            <tr class="bg-slate-50 border-y border-slate-200 text-slate-600 text-xs">
+              <th class="py-3 px-4 font-bold">車種</th>
+              <th class="py-3 px-4 font-bold text-right">4時間まで</th>
+              <th class="py-3 px-4 font-bold text-right">8時間まで</th>
+              <th class="py-3 px-4 font-bold text-right">8時間以上</th>
+              <th class="py-3 px-4 font-bold text-right">夜間料金<span class="block font-normal text-[10px] text-slate-400">20:00〜翌9:00</span></th>
+            </tr>
+          </thead>
+          <tbody id="customer-pricing-tbody" class="divide-y divide-slate-100"></tbody>
+        </table>
+      </div>
+
+      <div class="text-xs text-slate-500 space-y-1.5 bg-slate-50 rounded-xl p-3.5 border border-slate-100 leading-relaxed">
+        <p>・翌日まで利用する場合、夜間料金（20:00〜翌9:00）として普通・電動ともに <strong id="customer-overnight-note" class="text-slate-700">+1,000円</strong> がかかります（翌日分は別途利用時間に応じて請求）。</p>
+        <p>・電動自転車は中学生以下の方はご利用いただけません（25km以上の走行は想定しておりません）。</p>
+      </div>
+    </div>
+
+    <!-- ご利用案内・窓口情報 -->
+    <div class="bg-white rounded-2xl p-4 sm:p-6 shadow-sm border border-slate-200 space-y-4">
+      <div class="flex items-center justify-between gap-2">
+        <h3 class="text-base sm:text-lg font-bold text-slate-900">ご利用案内・貸出窓口</h3>
+        <button type="button" onclick="openTermsModal()" class="px-3 py-1.5 rounded-lg bg-emerald-50 text-emerald-700 hover:bg-emerald-100 text-xs font-bold transition-colors">
+          利用規約全文を読む
+        </button>
+      </div>
+
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 text-sm">
+        <div class="rounded-xl bg-slate-50 p-4 border border-slate-100 space-y-2">
+          <div class="font-bold text-xs uppercase tracking-wider text-emerald-700">利用時間・ルール</div>
+          <ul class="space-y-1.5 text-xs sm:text-sm text-slate-600 leading-relaxed">
+            <li><strong class="text-slate-800">利用時間：</strong>9:00〜20:00（最終貸出 17:00）</li>
+            <li><strong class="text-slate-800">休館日：</strong>貸出不可</li>
+            <li><strong class="text-slate-800">利用条件：</strong>事前予約不可・お一人1台まで</li>
+            <li><strong class="text-slate-800">初回手続き：</strong>窓口にて紙の利用申込書にご記入いただきます</li>
+            <li><strong class="text-slate-800">持ち物：</strong>身分証明書必須（メンバーズカード保有者含む）</li>
+          </ul>
+        </div>
+        <div class="rounded-xl bg-slate-50 p-4 border border-slate-100 space-y-2">
+          <div class="font-bold text-xs uppercase tracking-wider text-emerald-700">貸出・返却場所（お問い合わせ）</div>
+          <div class="space-y-1.5 text-xs sm:text-sm text-slate-600">
+            <p class="font-bold text-slate-900">都城市まちなか交流センター</p>
+            <p class="text-xs text-slate-500">運営：都城まちづくり株式会社</p>
+            <p>〒885-0071 宮崎県都城市中町17街区19号</p>
+            <div class="pt-1">
+              <a href="tel:0986-21-6121" class="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white border border-emerald-200 text-emerald-700 font-bold text-xs sm:text-sm shadow-2xs hover:bg-emerald-50 transition-colors">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
+                0986-21-6121
+              </a>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- フッター -->
+  <footer class="py-6 px-4 text-center text-xs text-slate-500 border-t border-slate-200/80 bg-white mt-auto space-y-1.5">
+    <p class="font-bold text-slate-700">まちなかレンタサイクル ｜ 都城市まちなか交流センター（都城まちづくり株式会社）</p>
+    <p>〒885-0071 宮崎県都城市中町17街区19号 ／ TEL：0986-21-6121 ／ 利用時間：9:00〜20:00（最終貸出 17:00）</p>
+  </footer>
+
+  <!-- 利用規約全文モーダル -->
+  <div id="terms-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-slate-900/60 backdrop-blur-xs">
+    <div class="bg-white rounded-2xl max-w-2xl w-full max-h-[88vh] flex flex-col shadow-xl border border-slate-200 overflow-hidden">
+      <div class="flex items-center justify-between px-5 py-4 border-b border-slate-200 bg-slate-50 shrink-0">
+        <div>
+          <h3 class="text-base sm:text-lg font-bold text-slate-900">まちなかレンタサイクル利用規約</h3>
+          <p class="text-[11px] text-slate-500">令和8年4月1日一部改正施行</p>
+        </div>
+        <button type="button" onclick="closeTermsModal()" class="p-1.5 rounded-lg text-slate-400 hover:bg-slate-200 hover:text-slate-700">
+          <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+        </button>
+      </div>
+      <div class="p-5 sm:p-6 overflow-y-auto text-xs sm:text-sm text-slate-700 leading-relaxed space-y-4">
+        <p>この利用規約は、レンタサイクルを利用していただく際に遵守していただく事項について規定しています。利用者は、この利用規約に同意の上、レンタサイクルを利用していただくことになります。</p>
+        <div>
+          <h4 class="font-bold text-slate-900 mb-1">1. 利用申込</h4>
+          <p>利用するときには、身分を証明できるもの（運転免許証、資格確認書、学生証など）をご持参いただき、利用申込書に必要事項を記入していただきます。別紙に定めるメンバーズカードをお持ちの方も含め、身分証明書の提示がない場合は、貸出をお断りする場合があります。</p>
+        </div>
+        <div>
+          <h4 class="font-bold text-slate-900 mb-1">2. 利用料金</h4>
+          <ul class="list-disc pl-5 space-y-1">
+            <li>(1) 普通自転車は、4時間まで200円・8時間まで400円・8時間以上600円です。</li>
+            <li>(2) 電動自転車は、4時間まで800円・8時間まで1,600円・8時間以上2,000円です。※電動自転車は中学生以下の利用はできません。</li>
+            <li>(3) 翌日まで利用する場合、夜間料金（20:00〜翌9:00）は、普通自転車、電動自転車ともに+1,000円です。※翌日分は別途利用時間に応じて請求します。</li>
+            <li>(4) 料金は全て前払いとなります。予定返却時間より早く返却された場合でも、返金はできません。</li>
+          </ul>
+        </div>
+        <div>
+          <h4 class="font-bold text-slate-900 mb-1">3. 利用時間</h4>
+          <ul class="list-disc pl-5 space-y-1">
+            <li>9:00〜20:00までです。（最終貸出は17:00までです）</li>
+            <li>20:00までには都城市まちなか交流センターに返却してください。</li>
+            <li>連絡がないまま返却がされないなど、当方が悪質と判断した場合には、所轄警察署に被害届を提出する等の措置をとる場合があります。</li>
+            <li>休館日の貸し出しは致しません。</li>
+          </ul>
+        </div>
+        <div>
+          <h4 class="font-bold text-slate-900 mb-1">4. 利用条件</h4>
+          <ul class="list-disc pl-5 space-y-1">
+            <li>貸出の事前予約はできません。</li>
+            <li>利用者お一人に対し一台までの貸出となります。</li>
+            <li>普通自転車は、中学生以上であれば、どなたでもご利用いただけます。ただし、中学生の利用については保護者名の記入が必要となります。</li>
+            <li>電動自転車は、中学生以下への貸し出しはできません。</li>
+            <li>用意している自転車がすべて貸出されている、故障している等条件が重なった場合は、利用できません。</li>
+            <li>営利目的の配達・運送業務では利用できません。</li>
+            <li>電動自転車は、25km以上の走行は想定しておりません。</li>
+          </ul>
+        </div>
+        <div>
+          <h4 class="font-bold text-slate-900 mb-1">5. 禁止行為</h4>
+          <ol class="list-decimal pl-5 space-y-0.5">
+            <li>自転車を利用者以外の者に使用をさせること</li>
+            <li>無謀運転、酒気帯び運転などの危険な行為</li>
+            <li>運転中の携帯電話の利用や、傘をさしながらの乗車行為</li>
+            <li>交通規則を無視した自転車の使用</li>
+            <li>危険個所、不適切な場所での使用</li>
+            <li>歩行者などの通行障害となるような行為</li>
+            <li>自転車又は付属品の改造等現状の変更</li>
+            <li>運転中に自転車の異常を認めた後に、無理に運転を継続する行為</li>
+            <li>営利目的の配達・運送業務での使用</li>
+            <li>その他、法令又は公序良俗に違反する行為</li>
+          </ol>
+        </div>
+        <div>
+          <h4 class="font-bold text-slate-900 mb-1">6. 貸出中の自転車の故障・不具合等について</h4>
+          <p>利用前に自転車・鍵等に異常があれば直ちに都城市まちなか交流センターへ報告してください。利用中にパンク・故障した場合は押して歩いてお持ちください。持ち込みが困難な場合は 0986-21-6121 までご連絡ください。利用者の意図的な行為に起因する故障は利用者負担となり、事前了承のない修理代金は負担できません。</p>
+        </div>
+        <div>
+          <h4 class="font-bold text-slate-900 mb-1">7. 自転車の盗難・紛失</h4>
+          <p>自転車から離れる際は必ず施錠してください。盗難・紛失時は直ちに都城まちづくり(株)及び警察署へ連絡してください。無施錠放置等に起因する場合は損害賠償を請求する場合があります。</p>
+        </div>
+        <div>
+          <h4 class="font-bold text-slate-900 mb-1">8. 利用中の事故・怪我・保障</h4>
+          <p>事故発生時は法令上の措置をとり、直ちに警察及び都城まちづくり(株)へ連絡のうえ必要書類を提出してください。都城まちづくり(株)加入の傷害保険の適用範囲内で補償されますが、届出のない事故や規約違反による事故、補償限度額超過分は利用者負担となります。</p>
+        </div>
+        <div>
+          <h4 class="font-bold text-slate-900 mb-1">9. 返却義務 / 10. 未返却時の処置</h4>
+          <p>通常の損耗を除き借り受けた状態で返却してください。連絡なく長期間未返却など悪質な場合は警察署への被害届・違約金徴収（5年経過車両は上限50,000円）・法的手続を行う場合があります。</p>
+        </div>
+        <div>
+          <h4 class="font-bold text-slate-900 mb-1">11. 個人情報 / 12. 附則</h4>
+          <p>都城まちづくり(株)は個人情報保護法を順守し、審査・統計分析・利用期間中の連絡の範囲内でのみ利用します。令和7年4月1日実施／令和8年2月1日一部改正／令和8年4月1日一部改正。</p>
+        </div>
+      </div>
+      <div class="px-5 py-3.5 border-t border-slate-200 bg-slate-50 flex justify-end shrink-0">
+        <button type="button" onclick="closeTermsModal()"
+          class="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm transition-colors">
+          確認して閉じる
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- トースト通知 -->
+  <div id="toast" class="fixed bottom-5 right-5 z-50 transform translate-y-20 opacity-0 transition-all duration-300 pointer-events-none">
+    <div class="bg-slate-900 text-white px-4 py-3 rounded-xl shadow-lg text-sm font-medium flex items-center gap-2.5">
+      <span id="toast-icon" class="w-2 h-2 rounded-full bg-emerald-400"></span>
+      <span id="toast-message"></span>
+    </div>
+  </div>
+
+  <script>
+    // ==========================================
+    // ★GitHub Pages 公開用 Firebase 設定（3ファイル共通）★
+    // Firebase コンソールの「プロジェクトの設定」からコピーした値を記入してください
+    // 未記入のままの場合はローカルテストモード（同一ブラウザ内連動）で動作します
+    // ==========================================
+    const FIREBASE_CONFIG = {
+      apiKey: "",
+      authDomain: "",
+      databaseURL: "",
+      projectId: "",
+      storageBucket: "",
+      messagingSenderId: "",
+      appId: ""
+    };
+
+    const STORAGE_KEY = 'machinaka_rentacycle_v4_nopii';
+
+    const DEFAULT_PUBLIC_DATA = {
+      bikes: [
+        { id: 'e1', name: '電動1号車', type: 'electric', status: 'available' },
+        { id: 'e2', name: '電動2号車', type: 'electric', status: 'available' },
+        { id: 'e3', name: '電動3号車', type: 'electric', status: 'available' },
+        { id: 'n1', name: '普通1号車', type: 'normal',   status: 'available' },
+        { id: 'n2', name: '普通2号車', type: 'normal',   status: 'available' },
+      ],
+      pricing: {
+        normal:   { '4h': 200, '8h': 400, 'over8h': 600 },
+        electric: { '4h': 800, '8h': 1600, 'over8h': 2000 },
+        overnight: 1000
+      },
+      updatedAt: null
+    };
+
+    let publicData = loadLocalFallback();
+    let toastTimer = null;
+    let firebaseDb = null;
+    const syncChannel = typeof BroadcastChannel !== 'undefined' ? new BroadcastChannel('machinaka_rentacycle_sync') : null;
+
+    function isFirebaseConfigured() {
+      return Boolean(FIREBASE_CONFIG.databaseURL && FIREBASE_CONFIG.databaseURL.trim());
+    }
+
+    function loadLocalFallback() {
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if (!raw) return structuredClone(DEFAULT_PUBLIC_DATA);
+        const parsed = JSON.parse(raw);
+        if (!Array.isArray(parsed.bikes) || !parsed.pricing?.normal || !parsed.pricing?.electric) {
+          return structuredClone(DEFAULT_PUBLIC_DATA);
+        }
+        return {
+          bikes: parsed.bikes.map(b => ({
+            id: b.id,
+            name: b.name,
+            type: b.type,
+            status: b.status === 'rented' ? 'rented' : 'available'
+          })),
+          pricing: parsed.pricing,
+          updatedAt: Date.now()
+        };
+      } catch (e) {
+        return structuredClone(DEFAULT_PUBLIC_DATA);
+      }
+    }
+
+    function formatYen(amount) {
+      return Number(amount).toLocaleString('ja-JP') + '円';
+    }
+
+    function escapeHtml(str) {
+      return String(str ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+    }
+
+    function formatTimeOnly(ts) {
+      const d = new Date(ts);
+      return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}:${String(d.getSeconds()).padStart(2, '0')}`;
+    }
+
+    function updateClock() {
+      const d = new Date();
+      document.getElementById('header-clock').textContent =
+        `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}:${String(d.getSeconds()).padStart(2, '0')}`;
+      document.getElementById('header-date').textContent =
+        `${d.getFullYear()}/${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')}`;
+    }
+
+    function openTermsModal() {
+      document.getElementById('terms-modal').classList.remove('hidden');
+    }
+
+    function closeTermsModal() {
+      document.getElementById('terms-modal').classList.add('hidden');
+    }
+
+    function showToast(message, type = 'success') {
+      const toast = document.getElementById('toast');
+      document.getElementById('toast-message').textContent = message;
+      document.getElementById('toast-icon').className = `w-2.5 h-2.5 rounded-full ${type === 'error' ? 'bg-rose-400' : 'bg-emerald-400'}`;
+      toast.classList.remove('translate-y-20', 'opacity-0');
+      toast.classList.add('translate-y-0', 'opacity-100');
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => {
+        toast.classList.remove('translate-y-0', 'opacity-100');
+        toast.classList.add('translate-y-20', 'opacity-0');
+      }, 2800);
+    }
+
+    function applyRemoteData(data) {
+      if (!data) return;
+      const bikesRaw = Array.isArray(data.bikes) ? data.bikes : (data.bikes ? Object.values(data.bikes) : null);
+      if (bikesRaw && bikesRaw.length > 0) {
+        publicData.bikes = bikesRaw.map(b => ({
+          id: b.id,
+          name: b.name,
+          type: b.type,
+          status: b.status === 'rented' ? 'rented' : 'available'
+        }));
+      }
+      if (data.pricing?.normal && data.pricing?.electric) {
+        publicData.pricing = data.pricing;
+      }
+      publicData.updatedAt = data.updatedAt || Date.now();
+      renderView();
+    }
+
+    function initFirebasePublicSync() {
+      if (!isFirebaseConfigured() || typeof firebase === 'undefined') return;
+
+      const badge = document.getElementById('customer-sync-badge');
+      try {
+        if (!firebase.apps.length) {
+          firebase.initializeApp(FIREBASE_CONFIG);
+        }
+        firebaseDb = firebase.database();
+
+        firebaseDb.ref('.info/connected').on('value', (snap) => {
+          if (snap.val() === true) {
+            badge.textContent = 'ライブ自動更新中';
+            badge.className = 'inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-sky-50 text-sky-700 border border-sky-200';
+            badge.classList.remove('hidden');
+          } else {
+            badge.textContent = '再接続中...';
+            badge.className = 'inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-50 text-amber-700 border border-amber-200';
+            badge.classList.remove('hidden');
+          }
+        });
+
+        firebaseDb.ref('public_status').on('value', (snapshot) => {
+          const data = snapshot.val();
+          if (data) applyRemoteData(data);
+        }, (err) => {
+          console.warn('Firebase読み取りエラー:', err);
+        });
+      } catch (e) {
+        console.warn('Firebase初期化エラー:', e);
+      }
+    }
+
+    function renderView() {
+      const bikes = publicData.bikes;
+      const pricing = publicData.pricing;
+
+      const electricBikes = bikes.filter(b => b.type === 'electric');
+      const normalBikes = bikes.filter(b => b.type === 'normal');
+
+      document.getElementById('summary-electric-avail').textContent = electricBikes.filter(b => b.status === 'available').length;
+      document.getElementById('summary-normal-avail').textContent = normalBikes.filter(b => b.status === 'available').length;
+
+      document.getElementById('customer-electric-rate').textContent =
+        `4時間まで ${formatYen(pricing.electric['4h'])} ／ 8時間まで ${formatYen(pricing.electric['8h'])}`;
+      document.getElementById('customer-normal-rate').textContent =
+        `4時間まで ${formatYen(pricing.normal['4h'])} ／ 8時間まで ${formatYen(pricing.normal['8h'])}`;
+
+      document.getElementById('customer-overnight-note').textContent = `+${formatYen(pricing.overnight)}`;
+
+      const updatedEl = document.getElementById('last-updated-label');
+      if (updatedEl) {
+        updatedEl.textContent = publicData.updatedAt
+          ? `最終更新 ${formatTimeOnly(publicData.updatedAt)}（自動反映）`
+          : '自動更新待機中';
+      }
+
+      // PC向けテーブル
+      document.getElementById('customer-pricing-tbody').innerHTML = `
+        <tr class="hover:bg-slate-50/70">
+          <td class="py-3 px-4 font-bold text-sky-900">普通自転車</td>
+          <td class="py-3 px-4 text-right font-bold tabular-nums">${formatYen(pricing.normal['4h'])}</td>
+          <td class="py-3 px-4 text-right font-bold tabular-nums">${formatYen(pricing.normal['8h'])}</td>
+          <td class="py-3 px-4 text-right font-bold tabular-nums">${formatYen(pricing.normal['over8h'])}</td>
+          <td class="py-3 px-4 text-right font-semibold text-slate-600 tabular-nums">+${formatYen(pricing.overnight)}</td>
+        </tr>
+        <tr class="hover:bg-slate-50/70">
+          <td class="py-3 px-4 font-bold text-emerald-900">電動自転車</td>
+          <td class="py-3 px-4 text-right font-bold tabular-nums">${formatYen(pricing.electric['4h'])}</td>
+          <td class="py-3 px-4 text-right font-bold tabular-nums">${formatYen(pricing.electric['8h'])}</td>
+          <td class="py-3 px-4 text-right font-bold tabular-nums">${formatYen(pricing.electric['over8h'])}</td>
+          <td class="py-3 px-4 text-right font-semibold text-slate-600 tabular-nums">+${formatYen(pricing.overnight)}</td>
+        </tr>
+      `;
+
+      // スマホ向け料金カード
+      document.getElementById('customer-pricing-mobile').innerHTML = `
+        <div class="rounded-xl p-3.5 bg-sky-50/60 border border-sky-200/80 space-y-2">
+          <div class="font-bold text-sky-900 text-sm">普通自転車</div>
+          <div class="grid grid-cols-3 gap-2 text-center">
+            <div class="bg-white rounded-lg p-2 border border-sky-100">
+              <div class="text-[10px] text-slate-500">4時間まで</div>
+              <div class="font-extrabold text-slate-900 text-sm tabular-nums">${formatYen(pricing.normal['4h'])}</div>
+            </div>
+            <div class="bg-white rounded-lg p-2 border border-sky-100">
+              <div class="text-[10px] text-slate-500">8時間まで</div>
+              <div class="font-extrabold text-slate-900 text-sm tabular-nums">${formatYen(pricing.normal['8h'])}</div>
+            </div>
+            <div class="bg-white rounded-lg p-2 border border-sky-100">
+              <div class="text-[10px] text-slate-500">8時間以上</div>
+              <div class="font-extrabold text-slate-900 text-sm tabular-nums">${formatYen(pricing.normal['over8h'])}</div>
+            </div>
+          </div>
+        </div>
+        <div class="rounded-xl p-3.5 bg-emerald-50/60 border border-emerald-200/80 space-y-2">
+          <div class="font-bold text-emerald-900 text-sm">電動自転車</div>
+          <div class="grid grid-cols-3 gap-2 text-center">
+            <div class="bg-white rounded-lg p-2 border border-emerald-100">
+              <div class="text-[10px] text-slate-500">4時間まで</div>
+              <div class="font-extrabold text-slate-900 text-sm tabular-nums">${formatYen(pricing.electric['4h'])}</div>
+            </div>
+            <div class="bg-white rounded-lg p-2 border border-emerald-100">
+              <div class="text-[10px] text-slate-500">8時間まで</div>
+              <div class="font-extrabold text-slate-900 text-sm tabular-nums">${formatYen(pricing.electric['8h'])}</div>
+            </div>
+            <div class="bg-white rounded-lg p-2 border border-emerald-100">
+              <div class="text-[10px] text-slate-500">8時間以上</div>
+              <div class="font-extrabold text-slate-900 text-sm tabular-nums">${formatYen(pricing.electric['over8h'])}</div>
+            </div>
+          </div>
+        </div>
+        <div class="rounded-xl px-3.5 py-2.5 bg-slate-100/80 border border-slate-200 flex items-center justify-between text-xs">
+          <span class="font-semibold text-slate-700">夜間料金（20:00〜翌9:00・共通）</span>
+          <span class="font-extrabold text-slate-900 tabular-nums">+${formatYen(pricing.overnight)}</span>
+        </div>
+      `;
+
+      // 車両ステータスカード
+      document.getElementById('customer-bike-grid').innerHTML = bikes.map(bike => {
+        const isAvailable = bike.status === 'available';
+        const isElectric = bike.type === 'electric';
+        const cardBorder = isAvailable ? 'border-emerald-200 bg-white' : 'border-slate-200 bg-slate-50/80';
+        const badgeClass = isAvailable
+          ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+          : 'bg-rose-100 text-rose-700 border border-rose-200';
+        const iconBg = isElectric
+          ? (isAvailable ? 'bg-emerald-50 text-emerald-600' : 'bg-slate-200/70 text-slate-400')
+          : (isAvailable ? 'bg-sky-50 text-sky-600' : 'bg-slate-200/70 text-slate-400');
+
+        const iconSvg = isElectric
+          ? `<svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 sm:w-6 sm:h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"/></svg>`
+          : `<svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 sm:w-6 sm:h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18.5" cy="17.5" r="3.5"/><circle cx="5.5" cy="17.5" r="3.5"/><circle cx="15" cy="5" r="1"/><path d="M12 17.5V14l-3-3 4-3 2 3h2"/></svg>`;
+
+        return `
+          <div class="rounded-2xl p-3.5 sm:p-5 border ${cardBorder} shadow-2xs flex items-center justify-between transition-all">
+            <div class="flex items-center gap-3">
+              <div class="w-10 h-10 sm:w-12 sm:h-12 rounded-xl ${iconBg} flex items-center justify-center shrink-0">
+                ${iconSvg}
+              </div>
+              <div>
+                <div class="text-[11px] sm:text-xs font-medium text-slate-500">${isElectric ? '電動自転車' : '普通自転車'}</div>
+                <div class="text-base sm:text-lg font-bold ${isAvailable ? 'text-slate-900' : 'text-slate-500'}">${escapeHtml(bike.name)}</div>
+              </div>
+            </div>
+            <div class="text-right shrink-0">
+              <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold ${badgeClass}">
+                <span class="w-1.5 h-1.5 rounded-full ${isAvailable ? 'bg-emerald-500' : 'bg-rose-500'}"></span>
+                ${isAvailable ? '貸出可' : '貸出中'}
+              </span>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    // 同一ブラウザ内での即時連動（ローカルテスト用）
+    window.addEventListener('storage', (e) => {
+      if (!isFirebaseConfigured() && e.key === STORAGE_KEY) {
+        publicData = loadLocalFallback();
+        renderView();
+      }
+    });
+
+    if (syncChannel) {
+      syncChannel.onmessage = () => {
+        if (!isFirebaseConfigured()) {
+          publicData = loadLocalFallback();
+          renderView();
+        }
+      };
+    }
+
+    window.addEventListener('DOMContentLoaded', () => {
+      renderView();
+      updateClock();
+      setInterval(updateClock, 1000);
+
+      if (isFirebaseConfigured()) {
+        initFirebasePublicSync();
+      }
+    });
+  </script>
+</body>
+</html>

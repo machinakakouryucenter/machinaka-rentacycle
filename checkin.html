@@ -1,0 +1,1045 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>窓口受付 | まちなかレンタサイクル</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Firebase SDK (Auth & Realtime Database) -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+  <!-- html5-qrcode CDN (会員カードQRスキャン用) -->
+  <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+  <!-- Google Fonts (Inter & Noto Sans JP) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['"Inter"', '"Noto Sans JP"', 'sans-serif'],
+          }
+        }
+      }
+    }
+  </script>
+</head>
+<body class="bg-slate-50 text-slate-800 min-h-screen flex flex-col antialiased selection:bg-emerald-200 selection:text-emerald-900">
+
+  <!-- ヘッダー（窓口端末専用） -->
+  <header class="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-sm">
+    <div class="max-w-4xl mx-auto px-3 sm:px-6">
+      <div class="flex items-center justify-between h-14 sm:h-16 gap-2">
+        <div class="flex items-center gap-2.5 min-w-0">
+          <div class="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-emerald-600 text-white flex items-center justify-center shadow-sm shrink-0">
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 sm:w-5 sm:h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="5" height="5" x="3" y="3" rx="1"/><rect width="5" height="5" x="16" y="3" rx="1"/><rect width="5" height="5" x="3" y="16" rx="1"/><path d="M21 16h-3a2 2 0 0 0-2 2v3"/><path d="M21 21v.01"/><path d="M12 7v3a2 2 0 0 1-2 2H7"/></svg>
+          </div>
+          <div class="min-w-0">
+            <div class="flex flex-wrap items-center gap-1.5">
+              <h1 class="text-sm sm:text-lg font-bold text-slate-900 leading-tight truncate">まちなかレンタサイクル</h1>
+              <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 shrink-0">窓口受付</span>
+              <span id="sync-mode-badge" class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-600 shrink-0">ローカルテスト</span>
+            </div>
+            <p class="text-[10px] sm:text-[11px] text-slate-500 leading-tight truncate">都城市まちなか交流センター（個人情報ゼロ設計）</p>
+          </div>
+        </div>
+        <div class="flex items-center gap-2 sm:gap-3 shrink-0">
+          <button type="button" id="btn-staff-logout" onclick="handleStaffLogout()"
+            class="hidden px-2.5 py-1.5 rounded-lg border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-600 text-[11px] sm:text-xs font-semibold transition-colors">
+            ログアウト
+          </button>
+          <div class="text-right">
+            <div id="header-clock" class="text-xs sm:text-sm font-semibold text-slate-700 tabular-nums">--:--:--</div>
+            <div id="header-date" class="text-[10px] sm:text-xs text-slate-400">----/--/--</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- 社員ログイン画面（Firebase設定時・未ログイン時はメイン画面をロック） -->
+  <div id="staff-auth-overlay" class="hidden flex-1 flex items-center justify-center p-4">
+    <div class="bg-white rounded-3xl max-w-md w-full p-6 sm:p-8 shadow-sm border border-slate-200 space-y-5">
+      <div class="text-center space-y-1.5">
+        <div class="w-12 h-12 rounded-2xl bg-emerald-600 text-white flex items-center justify-center mx-auto shadow-sm">
+          <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+        </div>
+        <h2 class="text-xl font-bold text-slate-900">窓口スタッフ ログイン</h2>
+        <p class="text-xs text-slate-500">社員アカウントでログインすると、全端末とリアルタイム同期されます。</p>
+      </div>
+      <form id="staff-login-form" onsubmit="handleStaffLogin(event)" class="space-y-4">
+        <div>
+          <label for="login-email" class="block text-xs font-bold text-slate-700 mb-1">メールアドレス</label>
+          <input type="email" id="login-email" required autocomplete="username" placeholder="staff@example.com"
+            class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200 outline-none text-sm">
+        </div>
+        <div>
+          <label for="login-password" class="block text-xs font-bold text-slate-700 mb-1">パスワード</label>
+          <input type="password" id="login-password" required autocomplete="current-password" placeholder="••••••••"
+            class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200 outline-none text-sm">
+        </div>
+        <p id="login-error-msg" class="hidden text-xs font-semibold text-rose-600 bg-rose-50 border border-rose-200 rounded-xl p-3"></p>
+        <button type="submit" id="btn-staff-login-submit"
+          class="w-full py-3 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm shadow-sm transition-colors">
+          ログインして窓口受付を開く
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <!-- メインコンテンツ -->
+  <main id="app-main" class="flex-1 max-w-2xl w-full mx-auto px-3 sm:px-6 py-5 sm:py-8 space-y-5">
+
+    <!-- 顧客番号入力 & 会員カードQRスキャン -->
+    <div class="bg-white rounded-3xl p-5 sm:p-6 shadow-sm border border-slate-200 space-y-4">
+      <div class="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <span class="inline-block px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-xs font-bold mb-1">窓口カウンター受付</span>
+          <h2 class="text-lg sm:text-xl font-bold text-slate-900">顧客番号入力・会員カードQRスキャン</h2>
+        </div>
+        <button type="button" onclick="clearMemberLookup()" class="text-xs font-semibold text-slate-500 hover:text-slate-700 underline">
+          入力をクリア
+        </button>
+      </div>
+      <div class="rounded-xl p-3.5 bg-emerald-50/70 border border-emerald-200/80 text-xs sm:text-sm text-emerald-950 leading-relaxed">
+        <strong>初回利用の方：</strong>窓口にて紙の利用申込書をご記入のうえ、発行された顧客番号を入力または会員カードQRを読み取ってください。<br>
+        <span class="text-xs text-emerald-800">※個人情報保護のため、本アプリに氏名・電話番号などの個人情報は一切保存されません。</span>
+      </div>
+
+      <!-- 顧客番号入力 + 照会ボタン -->
+      <div class="flex flex-col sm:flex-row gap-2.5">
+        <div class="relative flex-1">
+          <input type="text" id="checkin-customer-id" placeholder="顧客番号を入力（例：MC-0001）"
+            onkeydown="handleCustomerIdKeydown(event)"
+            class="w-full px-4 py-3 rounded-xl border border-slate-300 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200 outline-none text-base font-mono uppercase bg-white">
+        </div>
+        <button type="button" onclick="lookupCustomerId()"
+          class="px-6 py-3 rounded-xl bg-slate-800 hover:bg-slate-900 active:bg-slate-950 text-white font-bold text-sm shadow-sm transition-colors shrink-0">
+          照会する
+        </button>
+      </div>
+
+      <!-- 照会結果ステータス表示 -->
+      <div id="member-lookup-status" class="hidden rounded-xl p-3.5 text-xs sm:text-sm"></div>
+
+      <!-- カメラQRスキャン & テスト用模擬スキャン -->
+      <div class="pt-3 border-t border-slate-100 space-y-3">
+        <div class="flex flex-wrap items-center gap-2.5">
+          <button type="button" id="btn-start-qr-scan" onclick="startCameraQrScan()"
+            class="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-semibold text-xs sm:text-sm shadow-xs transition-colors">
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/></svg>
+            カメラで会員QRを読み取る
+          </button>
+          <button type="button" id="btn-stop-qr-scan" onclick="stopCameraQrScan()"
+            class="hidden inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-semibold text-xs sm:text-sm shadow-xs transition-colors">
+            カメラを停止
+          </button>
+        </div>
+
+        <div id="qr-reader-wrapper" class="hidden rounded-2xl overflow-hidden border border-slate-200 bg-slate-900 p-2 space-y-2">
+          <div id="qr-reader" class="w-full max-w-sm mx-auto rounded-xl overflow-hidden bg-black"></div>
+          <p class="text-[11px] text-center text-slate-300">会員カードのQRコードを枠内にかざしてください</p>
+        </div>
+
+        <div id="qr-camera-error" class="hidden rounded-xl p-3 bg-amber-50 border border-amber-200 text-amber-900 text-xs leading-relaxed"></div>
+
+        <div class="bg-slate-50 rounded-xl p-3 border border-slate-200/80 space-y-2">
+          <div class="text-[11px] font-bold text-slate-500">動作確認用：テスト用会員QRスキャン（模擬・個人情報なし）</div>
+          <div class="flex flex-wrap gap-2">
+            <button type="button" onclick="simulateMemberQrScan('MC-0001')"
+              class="px-3 py-1.5 rounded-lg bg-white border border-slate-300 hover:border-emerald-400 hover:bg-emerald-50 text-slate-700 text-xs font-semibold transition-colors">
+              MC-0001（一般）
+            </button>
+            <button type="button" onclick="simulateMemberQrScan('MC-0002')"
+              class="px-3 py-1.5 rounded-lg bg-white border border-slate-300 hover:border-sky-400 hover:bg-sky-50 text-slate-700 text-xs font-semibold transition-colors">
+              MC-0002（中学生）
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- チェックインフォーム本体 -->
+    <div class="bg-white rounded-3xl p-5 sm:p-8 shadow-sm border border-slate-200">
+      <div class="mb-6">
+        <div class="flex items-center justify-between gap-2">
+          <div>
+            <p class="text-xs font-bold text-emerald-700 mb-0.5">都城市まちなか交流センター</p>
+            <h2 class="text-xl font-bold text-slate-900">利用申込・チェックイン</h2>
+          </div>
+          <span class="text-xs font-semibold px-2.5 py-1 rounded-full bg-slate-100 text-slate-600 shrink-0">前払い制</span>
+        </div>
+        <p class="text-xs sm:text-sm text-slate-500 mt-1">顧客番号と車両・プランを選択し、身分証明書のご提示と利用規約に同意のうえ確定してください。（お一人1台まで・最終貸出17:00）</p>
+      </div>
+
+      <form id="checkin-form" onsubmit="handleCheckinSubmit(event)" class="space-y-5">
+        <!-- 1. 希望の車両 -->
+        <div>
+          <label class="block text-sm font-bold text-slate-800 mb-2">
+            1. 希望の車両（現在「貸出可」の自転車） <span class="text-rose-500">*</span>
+          </label>
+          <div id="checkin-bike-options" class="grid grid-cols-1 gap-2.5"></div>
+          <div id="checkin-no-bikes" class="hidden p-4 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-sm font-medium text-center">
+            申し訳ございません。現在すべての自転車が貸出中です。
+          </div>
+        </div>
+
+        <!-- 2. 利用プラン選択 -->
+        <div id="checkin-plan-section" class="space-y-3">
+          <label class="block text-sm font-bold text-slate-800">
+            2. 利用プランを選択 <span class="text-rose-500">*</span>
+          </label>
+          <div class="grid grid-cols-3 gap-2">
+            <label class="relative flex flex-col items-center justify-center p-3 rounded-xl border border-slate-200 cursor-pointer hover:bg-slate-50 has-[:checked]:border-emerald-500 has-[:checked]:bg-emerald-50/70 has-[:checked]:ring-1 has-[:checked]:ring-emerald-500 transition-all text-center">
+              <input type="radio" name="checkin-plan" value="4h" checked onchange="updateCheckinPricePreview()" class="sr-only">
+              <span class="text-xs sm:text-sm font-bold text-slate-800">4時間まで</span>
+              <span id="plan-price-4h" class="text-xs sm:text-sm font-extrabold text-emerald-700 mt-0.5 tabular-nums">--円</span>
+            </label>
+            <label class="relative flex flex-col items-center justify-center p-3 rounded-xl border border-slate-200 cursor-pointer hover:bg-slate-50 has-[:checked]:border-emerald-500 has-[:checked]:bg-emerald-50/70 has-[:checked]:ring-1 has-[:checked]:ring-emerald-500 transition-all text-center">
+              <input type="radio" name="checkin-plan" value="8h" onchange="updateCheckinPricePreview()" class="sr-only">
+              <span class="text-xs sm:text-sm font-bold text-slate-800">8時間まで</span>
+              <span id="plan-price-8h" class="text-xs sm:text-sm font-extrabold text-emerald-700 mt-0.5 tabular-nums">--円</span>
+            </label>
+            <label class="relative flex flex-col items-center justify-center p-3 rounded-xl border border-slate-200 cursor-pointer hover:bg-slate-50 has-[:checked]:border-emerald-500 has-[:checked]:bg-emerald-50/70 has-[:checked]:ring-1 has-[:checked]:ring-emerald-500 transition-all text-center">
+              <input type="radio" name="checkin-plan" value="over8h" onchange="updateCheckinPricePreview()" class="sr-only">
+              <span class="text-xs sm:text-sm font-bold text-slate-800">8時間以上</span>
+              <span id="plan-price-over8h" class="text-xs sm:text-sm font-extrabold text-emerald-700 mt-0.5 tabular-nums">--円</span>
+            </label>
+          </div>
+
+          <label class="flex items-start gap-3 p-3.5 rounded-xl border border-slate-200 bg-slate-50/70 cursor-pointer hover:bg-slate-100/70 transition-colors">
+            <input type="checkbox" id="checkin-overnight" onchange="updateCheckinPricePreview()"
+              class="mt-0.5 w-4 h-4 rounded text-emerald-600 focus:ring-emerald-500 border-slate-300">
+            <div class="text-xs sm:text-sm">
+              <span class="font-bold text-slate-800">翌日まで利用（夜間料金 <span id="plan-overnight-label">+1,000円</span>）</span>
+              <p class="text-[11px] text-slate-500 mt-0.5">20:00〜翌9:00の夜間料金が加算されます。翌日分は別途利用時間に応じて請求します。</p>
+            </div>
+          </label>
+
+          <div class="rounded-2xl p-4 bg-emerald-50 border border-emerald-200 flex items-center justify-between">
+            <div>
+              <div class="text-xs font-bold text-emerald-900">お支払い予定額（前払い）</div>
+              <div class="text-[11px] text-emerald-700 mt-0.5">※予定より早く返却されても返金はできません</div>
+            </div>
+            <div id="checkin-prepay-total" class="text-2xl sm:text-3xl font-extrabold text-emerald-700 tabular-nums">--円</div>
+          </div>
+        </div>
+
+        <!-- 3. 利用区分・年齢確認 -->
+        <div class="space-y-4 pt-2 border-t border-slate-100">
+          <div class="flex items-center justify-between gap-2">
+            <div class="text-sm font-bold text-slate-800">3. 利用区分・年齢確認</div>
+            <span id="form-member-badge" class="hidden inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
+              登録済み会員番号
+            </span>
+          </div>
+
+          <div id="electric-age-warning" class="hidden rounded-xl p-4 bg-rose-50 border border-rose-200 space-y-2.5">
+            <div class="flex items-start gap-2 text-rose-800 text-xs sm:text-sm font-bold">
+              <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-rose-600 shrink-0 mt-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>
+              <span>電動自転車は中学生以下の方はご利用いただけません。</span>
+            </div>
+            <label class="flex items-center gap-2.5 cursor-pointer">
+              <input type="checkbox" id="checkin-confirm-highschool"
+                class="w-4 h-4 rounded text-rose-600 focus:ring-rose-500 border-rose-300">
+              <span class="text-xs sm:text-sm font-semibold text-rose-900">高校生以上であることを確認済み（中学生以下利用不可） <span class="text-rose-600">*</span></span>
+            </label>
+          </div>
+
+          <div id="normal-student-section" class="hidden rounded-xl p-4 bg-sky-50/70 border border-sky-200 space-y-3">
+            <label class="flex items-center gap-2.5 cursor-pointer">
+              <input type="checkbox" id="checkin-is-junior-high" onchange="toggleGuardianPaperConfirm(this.checked)"
+                class="w-4 h-4 rounded text-sky-600 focus:ring-sky-500 border-sky-300">
+              <span class="text-xs sm:text-sm font-semibold text-sky-950">中学生利用（普通自転車のみ・保護者同意が必要）</span>
+            </label>
+            <div id="guardian-confirm-wrapper" class="hidden pt-2 border-t border-sky-200/80">
+              <label class="flex items-start gap-2.5 cursor-pointer">
+                <input type="checkbox" id="checkin-guardian-paper-confirmed"
+                  class="mt-0.5 w-4 h-4 rounded text-sky-600 focus:ring-sky-500 border-sky-400">
+                <span class="text-xs sm:text-sm font-bold text-sky-950">
+                  紙の申込書に保護者氏名が記入済みであることを確認しました <span class="text-rose-500">*</span>
+                </span>
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <!-- 4. 身分証明書確認 & 利用規約同意 -->
+        <div class="space-y-3 pt-2 border-t border-slate-100">
+          <div class="text-sm font-bold text-slate-800">4. 窓口確認・利用規約への同意</div>
+
+          <div class="rounded-xl p-3.5 bg-amber-50/70 border border-amber-200 space-y-2">
+            <p class="text-xs text-amber-900 leading-relaxed">
+              <strong>身分証明書の提示について：</strong>運転免許証、資格確認書、学生証などのご提示が必要です（メンバーズカードをお持ちの方も提示が必要です）。初回利用時は紙の申込書をご記入いただきます。
+            </p>
+            <label class="flex items-center gap-2.5 cursor-pointer pt-1">
+              <input type="checkbox" id="checkin-id-verified" required
+                class="w-4 h-4 rounded text-emerald-600 focus:ring-emerald-500 border-amber-400">
+              <span class="text-xs sm:text-sm font-semibold text-slate-800">身分証明書の提示を確認済み（紙台帳と照合／初回記入済み） <span class="text-rose-500">*</span></span>
+            </label>
+          </div>
+
+          <div class="rounded-xl p-3.5 bg-slate-50 border border-slate-200 space-y-2.5">
+            <div class="flex items-center justify-between gap-2">
+              <span class="text-xs font-bold text-slate-700">まちなかレンタサイクル利用規約</span>
+              <button type="button" onclick="openTermsModal()"
+                class="px-3 py-1 rounded-lg bg-white border border-emerald-300 text-emerald-700 hover:bg-emerald-50 text-xs font-bold transition-colors">
+                利用規約全文を確認
+              </button>
+            </div>
+            <label class="flex items-center gap-2.5 cursor-pointer">
+              <input type="checkbox" id="checkin-agree-terms" required
+                class="w-4 h-4 rounded text-emerald-600 focus:ring-emerald-500 border-slate-300">
+              <span class="text-xs sm:text-sm font-bold text-slate-900">利用規約の内容を確認し、同意します <span class="text-rose-500">*</span></span>
+            </label>
+          </div>
+        </div>
+
+        <div class="pt-2">
+          <button type="submit" id="checkin-submit-btn"
+            class="w-full py-4 px-6 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 disabled:bg-slate-300 disabled:cursor-not-allowed text-white font-bold text-base shadow-sm transition-colors">
+            チェックイン確定（前払い受付）
+          </button>
+          <p class="text-xs text-slate-400 text-center mt-2.5">※確定した時刻と顧客番号が貸出開始記録として保存されます</p>
+        </div>
+      </form>
+    </div>
+  </main>
+
+  <!-- フッター -->
+  <footer class="py-5 px-4 text-center text-xs text-slate-500 border-t border-slate-200/80 bg-white mt-auto space-y-1">
+    <p class="font-bold text-slate-700">まちなかレンタサイクル 窓口受付端末 ｜ 都城市まちなか交流センター</p>
+    <p>〒885-0071 宮崎県都城市中町17街区19号 ／ TEL：0986-21-6121</p>
+  </footer>
+
+  <!-- 利用規約全文モーダル -->
+  <div id="terms-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-slate-900/60 backdrop-blur-xs">
+    <div class="bg-white rounded-2xl max-w-2xl w-full max-h-[88vh] flex flex-col shadow-xl border border-slate-200 overflow-hidden">
+      <div class="flex items-center justify-between px-5 py-4 border-b border-slate-200 bg-slate-50 shrink-0">
+        <div>
+          <h3 class="text-base sm:text-lg font-bold text-slate-900">まちなかレンタサイクル利用規約</h3>
+          <p class="text-[11px] text-slate-500">令和8年4月1日一部改正施行</p>
+        </div>
+        <button type="button" onclick="closeTermsModal()" class="p-1.5 rounded-lg text-slate-400 hover:bg-slate-200 hover:text-slate-700">
+          <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+        </button>
+      </div>
+      <div class="p-5 sm:p-6 overflow-y-auto text-xs sm:text-sm text-slate-700 leading-relaxed space-y-4">
+        <p>この利用規約は、レンタサイクルを利用していただく際に遵守していただく事項について規定しています。利用者は、この利用規約に同意の上、レンタサイクルを利用していただくことになります。</p>
+        <div>
+          <h4 class="font-bold text-slate-900 mb-1">1. 利用申込</h4>
+          <p>身分を証明できるもの（運転免許証、資格確認書、学生証など）をご持参いただき、利用申込書に必要事項を記入していただきます。メンバーズカードをお持ちの方も含め、身分証明書の提示がない場合は貸出をお断りする場合があります。</p>
+        </div>
+        <div>
+          <h4 class="font-bold text-slate-900 mb-1">2. 利用料金（前払い制・返金不可）</h4>
+          <ul class="list-disc pl-5 space-y-1">
+            <li>普通自転車：4時間まで200円・8時間まで400円・8時間以上600円</li>
+            <li>電動自転車：4時間まで800円・8時間まで1,600円・8時間以上2,000円（中学生以下利用不可）</li>
+            <li>夜間料金（20:00〜翌9:00）：普通・電動ともに+1,000円（翌日分は別途請求）</li>
+          </ul>
+        </div>
+        <div>
+          <h4 class="font-bold text-slate-900 mb-1">3. 利用時間・4. 利用条件・5. 禁止行為</h4>
+          <p>利用時間は9:00〜20:00（最終貸出17:00・休館日不可）。事前予約不可・お一人1台まで。普通自転車は中学生以上（中学生は保護者名記入必須）、電動自転車は高校生以上（25km以上の走行非想定）。又貸し・危険運転・携帯電話操作・傘さし運転・営利配達業務等は禁止します。</p>
+        </div>
+        <div>
+          <h4 class="font-bold text-slate-900 mb-1">6. 故障・7. 盗難・8. 事故・9. 返却・10. 未返却処置・11. 個人情報</h4>
+          <p>パンク・故障時は押して歩いてご返却いただくか 0986-21-6121 までご連絡ください。離れる際は必ず施錠してください。事故時は警察および都城まちづくり(株)へ直ちに連絡してください。連絡なく長期間未返却の場合は被害届提出・違約金請求（5年経過車両は上限50,000円）等の措置をとる場合があります。</p>
+        </div>
+      </div>
+      <div class="px-5 py-3.5 border-t border-slate-200 bg-slate-50 flex justify-end shrink-0">
+        <button type="button" onclick="closeTermsModal()"
+          class="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm transition-colors">
+          確認して閉じる
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- チェックイン完了モーダル -->
+  <div id="checkin-success-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-xs">
+    <div class="bg-white rounded-2xl max-w-sm w-full p-6 shadow-xl border border-slate-200 text-center space-y-4">
+      <div class="w-14 h-14 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center mx-auto">
+        <svg xmlns="http://www.w3.org/2000/svg" class="w-8 h-8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+      </div>
+      <h3 class="text-xl font-bold text-slate-900">チェックイン完了</h3>
+      <div id="checkin-success-details" class="text-sm text-slate-600 bg-slate-50 rounded-xl p-4 text-left space-y-1.5 border border-slate-100"></div>
+      <p class="text-xs text-slate-500">20:00までに都城市まちなか交流センターへご返却ください。お気をつけていってらっしゃいませ！</p>
+      <button type="button" onclick="closeCheckinSuccessModal()"
+        class="w-full py-3 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm shadow-sm transition-colors">
+        閉じる
+      </button>
+    </div>
+  </div>
+
+  <!-- トースト通知 -->
+  <div id="toast" class="fixed bottom-5 right-5 z-50 transform translate-y-20 opacity-0 transition-all duration-300 pointer-events-none">
+    <div class="bg-slate-900 text-white px-4 py-3 rounded-xl shadow-lg text-sm font-medium flex items-center gap-2.5">
+      <span id="toast-icon" class="w-2 h-2 rounded-full bg-emerald-400"></span>
+      <span id="toast-message"></span>
+    </div>
+  </div>
+
+  <script>
+    // ==========================================
+    // ★GitHub Pages 公開用 Firebase 設定（3ファイル共通）★
+    // Firebase コンソールの「プロジェクトの設定」からコピーした値を記入してください
+    // 未記入のままの場合はローカルテストモード（同一ブラウザ内連動）で動作します
+    // ==========================================
+    const FIREBASE_CONFIG = {
+      apiKey: "",
+      authDomain: "",
+      databaseURL: "",
+      projectId: "",
+      storageBucket: "",
+      messagingSenderId: "",
+      appId: ""
+    };
+
+    const STORAGE_KEY = 'machinaka_rentacycle_v4_nopii';
+    const PLAN_LABELS = { '4h': '4時間まで', '8h': '8時間まで', 'over8h': '8時間以上' };
+    const ATTR_LABELS = { 'general': '一般', 'junior_high': '中学生' };
+
+    const DEFAULT_STATE = {
+      bikes: [
+        { id: 'e1', name: '電動1号車', type: 'electric', status: 'available', rental: null },
+        { id: 'e2', name: '電動2号車', type: 'electric', status: 'available', rental: null },
+        { id: 'e3', name: '電動3号車', type: 'electric', status: 'available', rental: null },
+        { id: 'n1', name: '普通1号車', type: 'normal',   status: 'available', rental: null },
+        { id: 'n2', name: '普通2号車', type: 'normal',   status: 'available', rental: null },
+      ],
+      members: [
+        { id: 'MC-0001', attribute: 'general' },
+        { id: 'MC-0002', attribute: 'junior_high' }
+      ],
+      pricing: {
+        normal:   { '4h': 200, '8h': 400, 'over8h': 600 },
+        electric: { '4h': 800, '8h': 1600, 'over8h': 2000 },
+        overnight: 1000
+      },
+      history: []
+    };
+
+    let state = loadLocalState();
+    let html5QrScanner = null;
+    let isScanningCamera = false;
+    let toastTimer = null;
+    let firebaseAuth = null;
+    let firebaseDb = null;
+    let currentUser = null;
+    let staffDataRef = null;
+    const syncChannel = typeof BroadcastChannel !== 'undefined' ? new BroadcastChannel('machinaka_rentacycle_sync') : null;
+
+    function isFirebaseConfigured() {
+      return Boolean(FIREBASE_CONFIG.apiKey && FIREBASE_CONFIG.databaseURL);
+    }
+
+    function normalizeState(raw) {
+      if (!raw || typeof raw !== 'object') return structuredClone(DEFAULT_STATE);
+      const bikesRaw = Array.isArray(raw.bikes) ? raw.bikes : (raw.bikes ? Object.values(raw.bikes) : DEFAULT_STATE.bikes);
+      const membersRaw = Array.isArray(raw.members) ? raw.members : (raw.members ? Object.values(raw.members) : []);
+      const historyRaw = Array.isArray(raw.history) ? raw.history : (raw.history ? Object.values(raw.history) : []);
+
+      return {
+        bikes: bikesRaw.map(b => ({
+          id: b.id,
+          name: b.name,
+          type: b.type,
+          status: b.status === 'rented' && b.rental ? 'rented' : 'available',
+          rental: b.status === 'rented' && b.rental ? b.rental : null
+        })),
+        members: membersRaw,
+        pricing: {
+          normal:   raw.pricing?.normal   || structuredClone(DEFAULT_STATE.pricing.normal),
+          electric: raw.pricing?.electric || structuredClone(DEFAULT_STATE.pricing.electric),
+          overnight: typeof raw.pricing?.overnight === 'number' ? raw.pricing.overnight : DEFAULT_STATE.pricing.overnight
+        },
+        history: historyRaw
+      };
+    }
+
+    function loadLocalState() {
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if (!raw) return structuredClone(DEFAULT_STATE);
+        return normalizeState(JSON.parse(raw));
+      } catch (e) {
+        return structuredClone(DEFAULT_STATE);
+      }
+    }
+
+    function buildPublicPayload() {
+      return {
+        updatedAt: Date.now(),
+        pricing: state.pricing,
+        bikes: state.bikes.map(b => ({ id: b.id, name: b.name, type: b.type, status: b.status }))
+      };
+    }
+
+    function saveState() {
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+        if (syncChannel) syncChannel.postMessage({ type: 'state_updated', at: Date.now() });
+
+        if (isFirebaseConfigured() && firebaseDb && currentUser) {
+          const updates = {
+            staff_data: { ...state, updatedAt: Date.now() },
+            public_status: buildPublicPayload()
+          };
+          firebaseDb.ref().update(updates).catch((err) => {
+            console.error('Firebase保存エラー:', err);
+            showToast('クラウド同期の保存に失敗しました', 'error');
+          });
+        }
+      } catch (e) {
+        showToast('データの保存に失敗しました', 'error');
+      }
+    }
+
+    // ------------------------------------------
+    // Firebase 社員認証 & リアルタイム双方向同期
+    // ------------------------------------------
+    function setSyncBadge(mode) {
+      const badge = document.getElementById('sync-mode-badge');
+      if (!badge) return;
+      if (mode === 'cloud_ok') {
+        badge.textContent = 'クラウド同期ON';
+        badge.className = 'px-2 py-0.5 rounded-full text-[10px] font-bold bg-sky-100 text-sky-800 shrink-0';
+      } else if (mode === 'cloud_wait') {
+        badge.textContent = '接続中...';
+        badge.className = 'px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 shrink-0';
+      } else {
+        badge.textContent = 'ローカルテスト';
+        badge.className = 'px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-600 shrink-0';
+      }
+    }
+
+    function initFirebaseAuthAndSync() {
+      if (!isFirebaseConfigured() || typeof firebase === 'undefined') {
+        setSyncBadge('local');
+        document.getElementById('staff-auth-overlay').classList.add('hidden');
+        document.getElementById('app-main').classList.remove('hidden');
+        renderCheckinView();
+        return;
+      }
+
+      if (!firebase.apps.length) {
+        firebase.initializeApp(FIREBASE_CONFIG);
+      }
+      firebaseAuth = firebase.auth();
+      firebaseDb = firebase.database();
+
+      document.getElementById('app-main').classList.add('hidden');
+      document.getElementById('staff-auth-overlay').classList.remove('hidden');
+
+      firebaseAuth.onAuthStateChanged((user) => {
+        currentUser = user;
+        if (user) {
+          document.getElementById('staff-auth-overlay').classList.add('hidden');
+          document.getElementById('app-main').classList.remove('hidden');
+          document.getElementById('btn-staff-logout').classList.remove('hidden');
+          setSyncBadge('cloud_wait');
+          startStaffRealtimeSync();
+        } else {
+          stopStaffRealtimeSync();
+          if (isScanningCamera) stopCameraQrScan();
+          document.getElementById('app-main').classList.add('hidden');
+          document.getElementById('btn-staff-logout').classList.add('hidden');
+          document.getElementById('staff-auth-overlay').classList.remove('hidden');
+          setSyncBadge('local');
+        }
+      });
+    }
+
+    function startStaffRealtimeSync() {
+      if (!firebaseDb) return;
+      stopStaffRealtimeSync();
+      staffDataRef = firebaseDb.ref('staff_data');
+      staffDataRef.on('value', (snapshot) => {
+        setSyncBadge('cloud_ok');
+        const val = snapshot.val();
+        if (!val) {
+          state = structuredClone(DEFAULT_STATE);
+          saveState();
+        } else {
+          state = normalizeState(val);
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+        }
+        renderCheckinView();
+      }, (err) => {
+        console.error('Firebase購読エラー:', err);
+        showToast('同期データの取得に失敗しました（権限を確認してください）', 'error');
+      });
+    }
+
+    function stopStaffRealtimeSync() {
+      if (staffDataRef) {
+        staffDataRef.off();
+        staffDataRef = null;
+      }
+    }
+
+    async function handleStaffLogin(event) {
+      event.preventDefault();
+      const email = document.getElementById('login-email').value.trim();
+      const password = document.getElementById('login-password').value;
+      const errEl = document.getElementById('login-error-msg');
+      const submitBtn = document.getElementById('btn-staff-login-submit');
+
+      errEl.classList.add('hidden');
+      submitBtn.disabled = true;
+      submitBtn.textContent = 'ログイン中...';
+
+      try {
+        await firebaseAuth.signInWithEmailAndPassword(email, password);
+        document.getElementById('staff-login-form').reset();
+        showToast('ログインしました');
+      } catch (err) {
+        errEl.textContent = 'メールアドレスまたはパスワードが正しくありません。';
+        errEl.classList.remove('hidden');
+      } finally {
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'ログインして窓口受付を開く';
+      }
+    }
+
+    async function handleStaffLogout() {
+      if (!firebaseAuth) return;
+      try {
+        await firebaseAuth.signOut();
+        showToast('ログアウトしました');
+      } catch (e) {
+        showToast('ログアウトに失敗しました', 'error');
+      }
+    }
+
+    // ------------------------------------------
+    // ユーティリティ
+    // ------------------------------------------
+    function formatDateTime(ts) {
+      const d = new Date(ts);
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      const hh = String(d.getHours()).padStart(2, '0');
+      const mm = String(d.getMinutes()).padStart(2, '0');
+      return `${y}/${m}/${day} ${hh}:${mm}`;
+    }
+
+    function formatYen(amount) {
+      return Number(amount).toLocaleString('ja-JP') + '円';
+    }
+
+    function escapeHtml(str) {
+      return String(str ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+    }
+
+    function getPlanFee(bikeType, planKey, overnight = false) {
+      const table = bikeType === 'electric' ? state.pricing.electric : state.pricing.normal;
+      const base = table[planKey] ?? table['4h'];
+      return base + (overnight ? state.pricing.overnight : 0);
+    }
+
+    function updateClock() {
+      const d = new Date();
+      document.getElementById('header-clock').textContent =
+        `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}:${String(d.getSeconds()).padStart(2, '0')}`;
+      document.getElementById('header-date').textContent =
+        `${d.getFullYear()}/${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')}`;
+    }
+
+    function showToast(message, type = 'success') {
+      const toast = document.getElementById('toast');
+      document.getElementById('toast-message').textContent = message;
+      document.getElementById('toast-icon').className = `w-2.5 h-2.5 rounded-full ${type === 'error' ? 'bg-rose-400' : 'bg-emerald-400'}`;
+      toast.classList.remove('translate-y-20', 'opacity-0');
+      toast.classList.add('translate-y-0', 'opacity-100');
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => {
+        toast.classList.remove('translate-y-0', 'opacity-100');
+        toast.classList.add('translate-y-20', 'opacity-0');
+      }, 3000);
+    }
+
+    function openTermsModal() {
+      document.getElementById('terms-modal').classList.remove('hidden');
+    }
+
+    function closeTermsModal() {
+      document.getElementById('terms-modal').classList.add('hidden');
+    }
+
+    // ------------------------------------------
+    // 顧客番号照会 & QRスキャン
+    // ------------------------------------------
+    function handleCustomerIdKeydown(event) {
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        lookupCustomerId();
+      }
+    }
+
+    function lookupCustomerId(overrideId = null) {
+      const inputEl = document.getElementById('checkin-customer-id');
+      const rawId = (overrideId !== null ? overrideId : inputEl.value).trim().toUpperCase();
+      inputEl.value = rawId;
+
+      const statusEl = document.getElementById('member-lookup-status');
+      const badgeEl = document.getElementById('form-member-badge');
+
+      if (!rawId) {
+        statusEl.className = 'rounded-xl p-3 bg-rose-50 border border-rose-200 text-rose-800 text-xs sm:text-sm';
+        statusEl.textContent = '顧客番号を入力してください（初回利用時は紙の申込書をご記入のうえ、発行された顧客番号を入力してください）。';
+        statusEl.classList.remove('hidden');
+        badgeEl.classList.add('hidden');
+        return;
+      }
+
+      const member = state.members.find(m => m.id.toUpperCase() === rawId);
+      if (member) {
+        if (member.attribute === 'junior_high') {
+          const availNormal = state.bikes.find(b => b.type === 'normal' && b.status === 'available');
+          if (availNormal) {
+            const radio = document.querySelector(`input[name="checkin-bike"][value="${availNormal.id}"]`);
+            if (radio) radio.checked = true;
+          }
+          updateCheckinPricePreview();
+          const juniorCheck = document.getElementById('checkin-is-junior-high');
+          if (juniorCheck) {
+            juniorCheck.checked = true;
+            toggleGuardianPaperConfirm(true);
+          }
+        } else {
+          const juniorCheck = document.getElementById('checkin-is-junior-high');
+          if (juniorCheck) {
+            juniorCheck.checked = false;
+            toggleGuardianPaperConfirm(false);
+          }
+          updateCheckinPricePreview();
+        }
+
+        const attrLabel = member.attribute === 'junior_high' ? '中学生（普通自転車のみ利用可）' : '一般（高校生以上）';
+        statusEl.className = 'rounded-xl p-3.5 bg-emerald-50 border border-emerald-200 text-emerald-900 text-xs sm:text-sm flex flex-wrap items-center justify-between gap-2';
+        statusEl.innerHTML = `
+          <div>
+            <span class="inline-block px-2 py-0.5 rounded bg-emerald-600 text-white text-[11px] font-bold mr-1.5">登録済み会員番号</span>
+            <strong class="font-mono">${escapeHtml(member.id)}</strong>（区分：${attrLabel}）を確認しました。
+          </div>
+          <span class="text-[11px] text-emerald-700 font-semibold">※紙台帳・身分証と照合してください</span>
+        `;
+        statusEl.classList.remove('hidden');
+        badgeEl.classList.remove('hidden');
+        showToast(`顧客番号 ${member.id}（${ATTR_LABELS[member.attribute]}）を照会しました`);
+      } else {
+        statusEl.className = 'rounded-xl p-3.5 bg-amber-50 border border-amber-200 text-amber-900 text-xs sm:text-sm';
+        statusEl.innerHTML = `顧客番号 <strong class="font-mono">${escapeHtml(rawId)}</strong> はアプリ未登録の番号です。初回利用（紙の申込書記入済み）としてこのままチェックインできます。`;
+        statusEl.classList.remove('hidden');
+        badgeEl.classList.add('hidden');
+        showToast(`未登録の顧客番号 ${rawId} として受付可能です`);
+      }
+    }
+
+    function simulateMemberQrScan(sampleId) {
+      if (isScanningCamera) stopCameraQrScan();
+      lookupCustomerId(sampleId);
+    }
+
+    function clearMemberLookup() {
+      if (isScanningCamera) stopCameraQrScan();
+      document.getElementById('checkin-customer-id').value = '';
+      document.getElementById('checkin-is-junior-high').checked = false;
+      toggleGuardianPaperConfirm(false);
+      document.getElementById('member-lookup-status').classList.add('hidden');
+      document.getElementById('form-member-badge').classList.add('hidden');
+      document.getElementById('qr-camera-error').classList.add('hidden');
+    }
+
+    async function startCameraQrScan() {
+      const errorEl = document.getElementById('qr-camera-error');
+      const wrapperEl = document.getElementById('qr-reader-wrapper');
+      const startBtn = document.getElementById('btn-start-qr-scan');
+      const stopBtn = document.getElementById('btn-stop-qr-scan');
+
+      errorEl.classList.add('hidden');
+
+      if (typeof Html5Qrcode === 'undefined') {
+        errorEl.textContent = 'QR読み取りライブラリの読み込みに失敗しました。顧客番号を手入力してください。';
+        errorEl.classList.remove('hidden');
+        return;
+      }
+
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        errorEl.textContent = 'この環境ではカメラ機能を利用できません（HTTPS環境が必要です）。顧客番号の手入力、または下の模擬スキャンをご利用ください。';
+        errorEl.classList.remove('hidden');
+        return;
+      }
+
+      wrapperEl.classList.remove('hidden');
+      startBtn.classList.add('hidden');
+      stopBtn.classList.remove('hidden');
+
+      try {
+        if (!html5QrScanner) {
+          html5QrScanner = new Html5Qrcode('qr-reader');
+        }
+        isScanningCamera = true;
+        await html5QrScanner.start(
+          { facingMode: 'environment' },
+          { fps: 10, qrbox: { width: 220, height: 220 } },
+          (decodedText) => {
+            const cleanCode = decodedText.trim();
+            stopCameraQrScan();
+            lookupCustomerId(cleanCode);
+          },
+          () => {}
+        );
+      } catch (err) {
+        isScanningCamera = false;
+        wrapperEl.classList.add('hidden');
+        startBtn.classList.remove('hidden');
+        stopBtn.classList.add('hidden');
+        errorEl.innerHTML = 'カメラを起動できませんでした（カメラ権限が拒否されたか、カメラが接続されていません）。<br>顧客番号の手入力、または下の模擬スキャンでお試しください。';
+        errorEl.classList.remove('hidden');
+      }
+    }
+
+    async function stopCameraQrScan() {
+      const wrapperEl = document.getElementById('qr-reader-wrapper');
+      const startBtn = document.getElementById('btn-start-qr-scan');
+      const stopBtn = document.getElementById('btn-stop-qr-scan');
+
+      if (html5QrScanner && isScanningCamera) {
+        try {
+          await html5QrScanner.stop();
+        } catch (e) {}
+      }
+      isScanningCamera = false;
+      wrapperEl.classList.add('hidden');
+      startBtn.classList.remove('hidden');
+      stopBtn.classList.add('hidden');
+    }
+
+    // ------------------------------------------
+    // フォーム描画 & 送信
+    // ------------------------------------------
+    function renderCheckinView() {
+      const container = document.getElementById('checkin-bike-options');
+      const noBikesMsg = document.getElementById('checkin-no-bikes');
+      const submitBtn = document.getElementById('checkin-submit-btn');
+
+      const availableBikes = state.bikes.filter(b => b.status === 'available');
+
+      if (availableBikes.length === 0) {
+        container.innerHTML = '';
+        noBikesMsg.classList.remove('hidden');
+        submitBtn.disabled = true;
+        document.getElementById('electric-age-warning').classList.add('hidden');
+        document.getElementById('normal-student-section').classList.add('hidden');
+        return;
+      }
+
+      noBikesMsg.classList.add('hidden');
+      submitBtn.disabled = false;
+
+      const selectedInput = document.querySelector('input[name="checkin-bike"]:checked');
+      const prevSelectedId = selectedInput ? selectedInput.value : availableBikes[0].id;
+
+      container.innerHTML = availableBikes.map((bike, idx) => {
+        const isElectric = bike.type === 'electric';
+        const base4h = isElectric ? state.pricing.electric['4h'] : state.pricing.normal['4h'];
+        const checked = (bike.id === prevSelectedId) || (idx === 0 && !availableBikes.some(b => b.id === prevSelectedId));
+
+        return `
+          <label class="relative flex items-center justify-between p-3.5 rounded-xl border border-slate-200 cursor-pointer hover:bg-slate-50 has-[:checked]:border-emerald-500 has-[:checked]:bg-emerald-50/60 has-[:checked]:ring-1 has-[:checked]:ring-emerald-500 transition-all">
+            <div class="flex items-center gap-3">
+              <input type="radio" name="checkin-bike" value="${bike.id}" ${checked ? 'checked' : ''} required
+                onchange="updateCheckinPricePreview()"
+                class="w-4 h-4 text-emerald-600 focus:ring-emerald-500 border-slate-300">
+              <div>
+                <div class="font-bold text-slate-900 text-sm sm:text-base">${escapeHtml(bike.name)}</div>
+                <div class="text-xs text-slate-500">${isElectric ? '電動自転車（高校生以上）' : '普通自転車（中学生以上）'}</div>
+              </div>
+            </div>
+            <div class="text-right">
+              <span class="text-xs font-bold text-slate-700">${formatYen(base4h)}〜</span>
+              <span class="text-[11px] text-slate-400 block">4時間まで</span>
+            </div>
+          </label>
+        `;
+      }).join('');
+
+      updateCheckinPricePreview();
+    }
+
+    function updateCheckinPricePreview() {
+      const selectedBikeRadio = document.querySelector('input[name="checkin-bike"]:checked');
+      if (!selectedBikeRadio) return;
+
+      const bike = state.bikes.find(b => b.id === selectedBikeRadio.value);
+      if (!bike) return;
+
+      const isElectric = bike.type === 'electric';
+      const table = isElectric ? state.pricing.electric : state.pricing.normal;
+
+      document.getElementById('plan-price-4h').textContent = formatYen(table['4h']);
+      document.getElementById('plan-price-8h').textContent = formatYen(table['8h']);
+      document.getElementById('plan-price-over8h').textContent = formatYen(table['over8h']);
+      document.getElementById('plan-overnight-label').textContent = `+${formatYen(state.pricing.overnight)}`;
+
+      const selectedPlan = document.querySelector('input[name="checkin-plan"]:checked')?.value || '4h';
+      const overnight = document.getElementById('checkin-overnight').checked;
+      const total = getPlanFee(bike.type, selectedPlan, overnight);
+
+      document.getElementById('checkin-prepay-total').textContent = formatYen(total);
+
+      const electricWarn = document.getElementById('electric-age-warning');
+      const electricCheck = document.getElementById('checkin-confirm-highschool');
+      const normalSection = document.getElementById('normal-student-section');
+      const juniorCheck = document.getElementById('checkin-is-junior-high');
+      const guardianPaperCheck = document.getElementById('checkin-guardian-paper-confirmed');
+
+      if (isElectric) {
+        electricWarn.classList.remove('hidden');
+        electricCheck.required = true;
+        normalSection.classList.add('hidden');
+        juniorCheck.checked = false;
+        toggleGuardianPaperConfirm(false);
+      } else {
+        electricWarn.classList.add('hidden');
+        electricCheck.required = false;
+        electricCheck.checked = false;
+        normalSection.classList.remove('hidden');
+        guardianPaperCheck.required = juniorCheck.checked;
+      }
+    }
+
+    function toggleGuardianPaperConfirm(isJuniorHigh) {
+      const wrapper = document.getElementById('guardian-confirm-wrapper');
+      const checkbox = document.getElementById('checkin-guardian-paper-confirmed');
+      if (isJuniorHigh) {
+        wrapper.classList.remove('hidden');
+        checkbox.required = true;
+      } else {
+        wrapper.classList.add('hidden');
+        checkbox.required = false;
+        checkbox.checked = false;
+      }
+    }
+
+    function handleCheckinSubmit(event) {
+      event.preventDefault();
+
+      const selectedBikeRadio = document.querySelector('input[name="checkin-bike"]:checked');
+      const selectedPlanRadio = document.querySelector('input[name="checkin-plan"]:checked');
+      const customerId = document.getElementById('checkin-customer-id').value.trim().toUpperCase();
+      const overnight = document.getElementById('checkin-overnight').checked;
+      const isJuniorHigh = document.getElementById('checkin-is-junior-high').checked;
+      const guardianPaperConfirmed = document.getElementById('checkin-guardian-paper-confirmed').checked;
+      const idVerified = document.getElementById('checkin-id-verified').checked;
+      const agreedTerms = document.getElementById('checkin-agree-terms').checked;
+
+      if (!customerId) {
+        showToast('顧客番号を入力またはQRコードで読み取ってください', 'error');
+        document.getElementById('checkin-customer-id').focus();
+        return;
+      }
+      if (!selectedBikeRadio || !selectedPlanRadio) {
+        showToast('車両と利用プランを選択してください', 'error');
+        return;
+      }
+
+      const bike = state.bikes.find(b => b.id === selectedBikeRadio.value);
+      if (!bike || bike.status !== 'available') {
+        showToast('選択された車両はすでに貸出中です', 'error');
+        renderCheckinView();
+        return;
+      }
+
+      if (bike.type === 'electric' && !document.getElementById('checkin-confirm-highschool').checked) {
+        showToast('電動自転車は高校生以上であることの確認が必要です', 'error');
+        return;
+      }
+      if (bike.type === 'normal' && isJuniorHigh && !guardianPaperConfirmed) {
+        showToast('紙の申込書に保護者氏名が記入済みであることを確認してください', 'error');
+        return;
+      }
+      if (!idVerified || !agreedTerms) {
+        showToast('身分証明書の確認と利用規約への同意が必要です', 'error');
+        return;
+      }
+
+      const planKey = selectedPlanRadio.value;
+      const prepaidFee = getPlanFee(bike.type, planKey, overnight);
+      const attribute = (bike.type === 'normal' && isJuniorHigh) ? 'junior_high' : 'general';
+      const now = Date.now();
+
+      bike.status = 'rented';
+      bike.rental = {
+        customerId,
+        attribute,
+        planKey,
+        overnight,
+        prepaidFee,
+        guardianPaperConfirmed: attribute === 'junior_high',
+        idVerified: true,
+        agreedTerms: true,
+        startTime: now
+      };
+
+      saveState();
+
+      document.getElementById('checkin-form').reset();
+      clearMemberLookup();
+
+      document.getElementById('checkin-success-details').innerHTML = `
+        <div class="flex justify-between"><span class="text-slate-500">車両</span><span class="font-bold text-slate-900">${escapeHtml(bike.name)}</span></div>
+        <div class="flex justify-between"><span class="text-slate-500">顧客番号</span><span class="font-mono font-bold text-emerald-700">${escapeHtml(customerId)}</span></div>
+        <div class="flex justify-between"><span class="text-slate-500">区分</span><span class="font-semibold text-slate-800">${ATTR_LABELS[attribute]}${attribute === 'junior_high' ? '（保護者確認済）' : ''}</span></div>
+        <div class="flex justify-between"><span class="text-slate-500">申込プラン</span><span class="font-semibold text-slate-800">${PLAN_LABELS[planKey]}${overnight ? '＋夜間' : ''}</span></div>
+        <div class="flex justify-between"><span class="text-slate-500">前払い済金額</span><span class="font-extrabold text-emerald-700">${formatYen(prepaidFee)}</span></div>
+        <div class="flex justify-between"><span class="text-slate-500">貸出開始時刻</span><span class="font-semibold text-slate-700">${formatDateTime(now)}</span></div>
+      `;
+      document.getElementById('checkin-success-modal').classList.remove('hidden');
+
+      renderCheckinView();
+    }
+
+    function closeCheckinSuccessModal() {
+      document.getElementById('checkin-success-modal').classList.add('hidden');
+      showToast('チェックインを記録しました');
+    }
+
+    // 同一ブラウザ内での即時連動（ローカルテスト時）
+    window.addEventListener('storage', (e) => {
+      if (!isFirebaseConfigured() && e.key === STORAGE_KEY) {
+        state = loadLocalState();
+        renderCheckinView();
+      }
+    });
+
+    if (syncChannel) {
+      syncChannel.onmessage = () => {
+        if (!isFirebaseConfigured()) {
+          state = loadLocalState();
+          renderCheckinView();
+        }
+      };
+    }
+
+    window.addEventListener('DOMContentLoaded', () => {
+      updateClock();
+      setInterval(updateClock, 1000);
+      initFirebaseAuthAndSync();
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,1262 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>管理画面 | まちなかレンタサイクル</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Firebase SDK (Auth & Realtime Database) -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+  <!-- QRCode.js CDN (会員カードQR生成用) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+  <!-- Google Fonts (Inter & Noto Sans JP) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['"Inter"', '"Noto Sans JP"', 'sans-serif'],
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    @media print {
+      body > *:not(#member-qr-modal) { display: none !important; }
+      #member-qr-modal {
+        position: static !important;
+        background: white !important;
+        padding: 0 !important;
+        display: flex !important;
+      }
+      #member-qr-modal .no-print { display: none !important; }
+      #member-qr-card {
+        box-shadow: none !important;
+        border: 2px solid #cbd5e1 !important;
+      }
+    }
+  </style>
+</head>
+<body class="bg-slate-50 text-slate-800 min-h-screen flex flex-col antialiased selection:bg-emerald-200 selection:text-emerald-900">
+
+  <!-- ヘッダー（管理画面専用） -->
+  <header class="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-sm">
+    <div class="max-w-5xl mx-auto px-3 sm:px-6">
+      <div class="flex items-center justify-between h-14 sm:h-16 gap-2">
+        <div class="flex items-center gap-2.5 min-w-0">
+          <div class="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-slate-800 text-white flex items-center justify-center shadow-sm shrink-0">
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 sm:w-5 sm:h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
+          </div>
+          <div class="min-w-0">
+            <div class="flex flex-wrap items-center gap-1.5">
+              <h1 class="text-sm sm:text-lg font-bold text-slate-900 leading-tight truncate">まちなかレンタサイクル</h1>
+              <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-800 text-white shrink-0">スタッフ管理画面</span>
+              <span id="sync-mode-badge" class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-600 shrink-0">ローカルテスト</span>
+            </div>
+            <p class="text-[10px] sm:text-[11px] text-slate-500 leading-tight truncate">都城市まちなか交流センター</p>
+          </div>
+        </div>
+        <div class="flex items-center gap-2 sm:gap-3 shrink-0">
+          <button type="button" id="btn-staff-logout" onclick="handleStaffLogout()"
+            class="hidden px-2.5 py-1.5 rounded-lg border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-600 text-[11px] sm:text-xs font-semibold transition-colors">
+            ログアウト
+          </button>
+          <div class="text-right">
+            <div id="header-clock" class="text-xs sm:text-sm font-semibold text-slate-700 tabular-nums">--:--:--</div>
+            <div id="header-date" class="text-[10px] sm:text-xs text-slate-400">----/--/--</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- 社員ログイン画面（Firebase設定時・未ログイン時はメイン画面をロック） -->
+  <div id="staff-auth-overlay" class="hidden flex-1 flex items-center justify-center p-4">
+    <div class="bg-white rounded-3xl max-w-md w-full p-6 sm:p-8 shadow-sm border border-slate-200 space-y-5">
+      <div class="text-center space-y-1.5">
+        <div class="w-12 h-12 rounded-2xl bg-slate-800 text-white flex items-center justify-center mx-auto shadow-sm">
+          <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+        </div>
+        <h2 class="text-xl font-bold text-slate-900">管理スタッフ ログイン</h2>
+        <p class="text-xs text-slate-500">社員アカウントでログインすると、複数端末間で貸出・精算・会員番号がリアルタイム同期されます。</p>
+      </div>
+      <form id="staff-login-form" onsubmit="handleStaffLogin(event)" class="space-y-4">
+        <div>
+          <label for="login-email" class="block text-xs font-bold text-slate-700 mb-1">メールアドレス</label>
+          <input type="email" id="login-email" required autocomplete="username" placeholder="staff@example.com"
+            class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200 outline-none text-sm">
+        </div>
+        <div>
+          <label for="login-password" class="block text-xs font-bold text-slate-700 mb-1">パスワード</label>
+          <input type="password" id="login-password" required autocomplete="current-password" placeholder="••••••••"
+            class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200 outline-none text-sm">
+        </div>
+        <p id="login-error-msg" class="hidden text-xs font-semibold text-rose-600 bg-rose-50 border border-rose-200 rounded-xl p-3"></p>
+        <button type="submit" id="btn-staff-login-submit"
+          class="w-full py-3 px-4 rounded-xl bg-slate-800 hover:bg-slate-900 text-white font-bold text-sm shadow-sm transition-colors">
+          ログインして管理画面を開く
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <!-- メインコンテンツ -->
+  <main id="app-main" class="flex-1 max-w-5xl w-full mx-auto px-3 sm:px-6 py-5 sm:py-8 space-y-6">
+
+    <!-- 1. 車両ステータス・貸出管理 -->
+    <div class="bg-white rounded-2xl p-5 sm:p-6 shadow-sm border border-slate-200">
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-5">
+        <div>
+          <h2 class="text-lg sm:text-xl font-bold text-slate-900">車両ステータス・貸出管理</h2>
+          <p class="text-xs sm:text-sm text-slate-500">顧客番号・区分・申込プラン・前払い済金額・経過時間・予定超過の有無をリアルタイム監視します。</p>
+        </div>
+        <div class="flex items-center gap-2 text-xs">
+          <span class="px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-800 font-semibold" id="admin-count-avail">貸出可: 0台</span>
+          <span class="px-2.5 py-1 rounded-full bg-amber-100 text-amber-800 font-semibold" id="admin-count-rented">貸出中: 0台</span>
+        </div>
+      </div>
+
+      <div id="admin-bike-list" class="space-y-3"></div>
+    </div>
+
+    <!-- 2. 会員番号（メンバーズカード）管理 -->
+    <div class="bg-white rounded-2xl p-5 sm:p-6 shadow-sm border border-slate-200 space-y-5">
+      <div class="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <div class="flex items-center gap-2">
+            <h2 class="text-lg sm:text-xl font-bold text-slate-900">会員番号（メンバーズカード）管理</h2>
+            <span class="px-2 py-0.5 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">個人情報ゼロ設計</span>
+          </div>
+          <p class="text-xs sm:text-sm text-slate-500 mt-0.5">顧客番号と区分（一般／中学生）のみを管理します。氏名等の個人情報は紙台帳で管理してください。</p>
+        </div>
+        <span class="px-2.5 py-1 rounded-full text-xs font-bold bg-slate-100 text-slate-700" id="admin-member-count">登録数: 0件</span>
+      </div>
+
+      <form id="member-add-form" onsubmit="handleAddMember(event)" class="rounded-xl p-4 bg-slate-50 border border-slate-200/80 space-y-3">
+        <div class="text-xs font-bold text-slate-700">新規会員番号の登録</div>
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
+          <div>
+            <label for="new-member-id" class="block text-[11px] font-semibold text-slate-600 mb-1">顧客番号 <span class="text-rose-500">*</span></label>
+            <input type="text" id="new-member-id" required placeholder="例：MC-0003"
+              class="w-full px-3 py-2 rounded-lg border border-slate-300 bg-white text-sm font-mono uppercase focus:border-emerald-500 outline-none">
+          </div>
+          <div>
+            <label for="new-member-attr" class="block text-[11px] font-semibold text-slate-600 mb-1">利用区分 <span class="text-rose-500">*</span></label>
+            <select id="new-member-attr"
+              class="w-full px-3 py-2 rounded-lg border border-slate-300 bg-white text-sm focus:border-emerald-500 outline-none">
+              <option value="general">一般（高校生以上）</option>
+              <option value="junior_high">中学生（普通自転車のみ）</option>
+            </select>
+          </div>
+          <div>
+            <button type="submit"
+              class="w-full px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs sm:text-sm font-bold shadow-xs transition-colors">
+              会員番号を登録する
+            </button>
+          </div>
+        </div>
+      </form>
+
+      <div id="admin-member-list" class="space-y-2.5"></div>
+    </div>
+
+    <!-- 3. 料金体系設定 -->
+    <div class="bg-white rounded-2xl p-5 sm:p-6 shadow-sm border border-slate-200">
+      <div class="flex flex-wrap items-center justify-between gap-2 mb-2">
+        <h2 class="text-lg sm:text-xl font-bold text-slate-900">料金体系設定（規約準拠）</h2>
+        <span class="px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">編集・保存可能</span>
+      </div>
+      <p class="text-xs sm:text-sm text-slate-500 mb-5">
+        前払い制（途中返却による返金不可）。実利用時間が申込プランを超過した場合、管理画面で差額を自動算出します。
+      </p>
+
+      <form id="pricing-form" onsubmit="handlePricingSave(event)" class="space-y-5">
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div class="rounded-xl p-4 bg-sky-50/50 border border-sky-200/80 space-y-3">
+            <div class="font-bold text-sky-900 text-sm">普通自転車（円）</div>
+            <div class="grid grid-cols-3 gap-2.5">
+              <div>
+                <label for="price-normal-4h" class="block text-[11px] font-semibold text-slate-600 mb-1">4時間まで</label>
+                <input type="number" id="price-normal-4h" min="0" step="10" required
+                  class="w-full px-3 py-2 rounded-lg border border-slate-300 bg-white text-sm font-bold tabular-nums focus:border-emerald-500 outline-none">
+              </div>
+              <div>
+                <label for="price-normal-8h" class="block text-[11px] font-semibold text-slate-600 mb-1">8時間まで</label>
+                <input type="number" id="price-normal-8h" min="0" step="10" required
+                  class="w-full px-3 py-2 rounded-lg border border-slate-300 bg-white text-sm font-bold tabular-nums focus:border-emerald-500 outline-none">
+              </div>
+              <div>
+                <label for="price-normal-over8h" class="block text-[11px] font-semibold text-slate-600 mb-1">8時間以上</label>
+                <input type="number" id="price-normal-over8h" min="0" step="10" required
+                  class="w-full px-3 py-2 rounded-lg border border-slate-300 bg-white text-sm font-bold tabular-nums focus:border-emerald-500 outline-none">
+              </div>
+            </div>
+          </div>
+
+          <div class="rounded-xl p-4 bg-emerald-50/50 border border-emerald-200/80 space-y-3">
+            <div class="font-bold text-emerald-900 text-sm">電動自転車（円）</div>
+            <div class="grid grid-cols-3 gap-2.5">
+              <div>
+                <label for="price-electric-4h" class="block text-[11px] font-semibold text-slate-600 mb-1">4時間まで</label>
+                <input type="number" id="price-electric-4h" min="0" step="10" required
+                  class="w-full px-3 py-2 rounded-lg border border-slate-300 bg-white text-sm font-bold tabular-nums focus:border-emerald-500 outline-none">
+              </div>
+              <div>
+                <label for="price-electric-8h" class="block text-[11px] font-semibold text-slate-600 mb-1">8時間まで</label>
+                <input type="number" id="price-electric-8h" min="0" step="10" required
+                  class="w-full px-3 py-2 rounded-lg border border-slate-300 bg-white text-sm font-bold tabular-nums focus:border-emerald-500 outline-none">
+              </div>
+              <div>
+                <label for="price-electric-over8h" class="block text-[11px] font-semibold text-slate-600 mb-1">8時間以上</label>
+                <input type="number" id="price-electric-over8h" min="0" step="10" required
+                  class="w-full px-3 py-2 rounded-lg border border-slate-300 bg-white text-sm font-bold tabular-nums focus:border-emerald-500 outline-none">
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="flex flex-col sm:flex-row sm:items-end justify-between gap-4 pt-1">
+          <div class="w-full sm:w-64">
+            <label for="price-overnight" class="block text-xs font-semibold text-slate-700 mb-1">
+              夜間料金（20:00〜翌9:00 / 共通・円）
+            </label>
+            <input type="number" id="price-overnight" min="0" step="10" required
+              class="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 bg-white text-sm font-bold tabular-nums focus:border-emerald-500 outline-none">
+          </div>
+          <button type="submit"
+            class="w-full sm:w-auto px-6 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-900 active:bg-slate-950 text-white font-semibold text-sm transition-colors shadow-sm">
+            料金設定を保存
+          </button>
+        </div>
+      </form>
+    </div>
+
+    <!-- 4. 利用履歴リスト -->
+    <div class="bg-white rounded-2xl p-5 sm:p-6 shadow-sm border border-slate-200">
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+        <div>
+          <h2 class="text-lg sm:text-xl font-bold text-slate-900">利用履歴</h2>
+          <p class="text-xs sm:text-sm text-slate-500">返却が完了した貸出履歴（累計売上：<span id="history-total-sales" class="font-bold text-slate-800">0円</span>）</p>
+        </div>
+        <button type="button" onclick="openClearHistoryModal()" id="btn-clear-history"
+          class="self-start sm:self-auto px-3 py-1.5 rounded-lg border border-slate-200 hover:bg-rose-50 hover:text-rose-600 hover:border-rose-200 text-slate-500 text-xs font-semibold transition-colors">
+          履歴をクリア
+        </button>
+      </div>
+
+      <div id="history-empty" class="py-10 text-center text-slate-400 text-sm bg-slate-50 rounded-xl border border-dashed border-slate-200">
+        まだ利用履歴はありません。
+      </div>
+      <div id="history-container" class="hidden space-y-3"></div>
+    </div>
+
+    <!-- 5. 複数社員リアルタイム同期（Firebase）ステータス -->
+    <div class="bg-white rounded-2xl p-5 sm:p-6 shadow-sm border border-slate-200 space-y-4">
+      <div class="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <h2 class="text-lg sm:text-xl font-bold text-slate-900">複数端末リアルタイム同期（GitHub Pages 運用）</h2>
+          <p class="text-xs sm:text-sm text-slate-500 mt-0.5">
+            3ファイル（<code class="font-mono bg-slate-100 px-1 rounded">index.html</code> / <code class="font-mono bg-slate-100 px-1 rounded">checkin.html</code> / <code class="font-mono bg-slate-100 px-1 rounded">admin.html</code>）すべてを GitHub Pages に公開し、Firebase で安全にリアルタイム同期します。
+          </p>
+        </div>
+        <span id="admin-cloud-status" class="text-[11px] font-bold px-2.5 py-1 rounded-full bg-slate-200 text-slate-600">ローカルテストモード</span>
+      </div>
+
+      <div class="rounded-xl p-4 bg-sky-50/50 border border-sky-200/80 space-y-2 text-xs text-sky-950 leading-relaxed">
+        <div class="flex flex-wrap items-center justify-between gap-2">
+          <span class="font-bold">ログイン中の社員アカウント</span>
+          <span id="admin-logged-in-email" class="font-mono font-bold text-emerald-700">未接続（ローカルテスト）</span>
+        </div>
+        <p class="text-[11px] text-sky-900/80">
+          ・本番運用を開始するには、3ファイルそれぞれのコード内にある <code class="font-mono bg-white px-1 py-0.5 rounded border border-sky-200">FIREBASE_CONFIG</code> に Firebase の設定値を貼り付けて GitHub にアップロードしてください。<br>
+          ・お客様画面（<code class="font-mono">index.html</code>）には空き状況と料金表（<code class="font-mono">public_status</code>）のみが配信され、貸出詳細・顧客番号・履歴（<code class="font-mono">staff_data</code>）はログイン済み社員のみアクセス可能です。
+        </p>
+      </div>
+    </div>
+
+    <!-- 6. データ管理（初期化・リセット） -->
+    <div class="bg-white rounded-2xl p-5 sm:p-6 shadow-sm border border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div>
+        <h2 class="text-base sm:text-lg font-bold text-slate-900">データ管理・初期化</h2>
+        <p class="text-xs sm:text-sm text-slate-500">すべての車両ステータス・貸出データ・料金設定・利用履歴を初期状態に戻します。</p>
+      </div>
+      <button type="button" onclick="openResetAllModal()"
+        class="px-4 py-2.5 rounded-xl border border-rose-200 bg-rose-50 hover:bg-rose-100 text-rose-700 font-semibold text-xs sm:text-sm transition-colors shrink-0">
+        初期状態にリセット
+      </button>
+    </div>
+
+  </main>
+
+  <!-- フッター -->
+  <footer class="py-5 px-4 text-center text-xs text-slate-500 border-t border-slate-200/80 bg-white mt-auto space-y-1">
+    <p class="font-bold text-slate-700">まちなかレンタサイクル スタッフ管理画面 ｜ 都城市まちなか交流センター</p>
+    <p>〒885-0071 宮崎県都城市中町17街区19号 ／ TEL：0986-21-6121</p>
+  </footer>
+
+  <!-- 精算確認モーダル -->
+  <div id="checkout-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-xs">
+    <div class="bg-white rounded-2xl max-w-md w-full p-6 shadow-xl border border-slate-200 space-y-5">
+      <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+        <h3 class="text-lg font-bold text-slate-900">返却・精算の確認</h3>
+        <button type="button" onclick="closeCheckoutModal()" class="p-1.5 rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-600">
+          <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+        </button>
+      </div>
+      <div id="checkout-modal-body" class="space-y-3 text-sm"></div>
+      <div class="flex gap-3 pt-2">
+        <button type="button" onclick="closeCheckoutModal()"
+          class="flex-1 py-3 px-4 rounded-xl border border-slate-300 text-slate-700 font-semibold text-sm hover:bg-slate-50 transition-colors">
+          キャンセル
+        </button>
+        <button type="button" onclick="confirmCheckout()"
+          class="flex-1 py-3 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm shadow-sm transition-colors">
+          返却完了
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 汎用確認モーダル -->
+  <div id="confirm-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-xs">
+    <div class="bg-white rounded-2xl max-w-sm w-full p-6 shadow-xl border border-slate-200 space-y-4">
+      <h3 id="confirm-modal-title" class="text-lg font-bold text-slate-900">確認</h3>
+      <p id="confirm-modal-msg" class="text-sm text-slate-600"></p>
+      <div class="flex gap-3 pt-2">
+        <button type="button" onclick="closeConfirmModal()"
+          class="flex-1 py-2.5 px-4 rounded-xl border border-slate-300 text-slate-700 font-semibold text-sm hover:bg-slate-50 transition-colors">
+          キャンセル
+        </button>
+        <button type="button" id="confirm-modal-ok"
+          class="flex-1 py-2.5 px-4 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-sm shadow-sm transition-colors">
+          実行する
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 会員カードQRコード プレビュー・印刷モーダル -->
+  <div id="member-qr-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-xs">
+    <div id="member-qr-card" class="bg-white rounded-2xl max-w-sm w-full p-6 shadow-xl border border-slate-200 text-center space-y-4">
+      <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+        <div class="text-left">
+          <p class="text-[10px] font-bold text-emerald-700">まちなかレンタサイクル</p>
+          <h3 class="text-base font-bold text-slate-900">メンバーズカードQR</h3>
+        </div>
+        <button type="button" onclick="closeMemberQrModal()" class="no-print p-1 rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-600">
+          <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+        </button>
+      </div>
+      <div class="space-y-1">
+        <div class="text-[11px] text-slate-400">顧客番号</div>
+        <div id="member-qr-id" class="text-2xl font-extrabold font-mono text-emerald-700 tracking-wider"></div>
+        <div id="member-qr-attr" class="inline-block px-2.5 py-0.5 rounded-full text-xs font-semibold bg-slate-100 text-slate-700"></div>
+      </div>
+      <div class="flex justify-center py-2">
+        <div class="p-3 bg-white rounded-xl border-2 border-slate-100 shadow-inner inline-block">
+          <div id="member-qr-canvas" class="w-44 h-44 flex items-center justify-center"></div>
+        </div>
+      </div>
+      <p class="text-[11px] text-slate-500">窓口にて本QRコードをご提示ください（ご利用時は身分証明書のご提示も必要です）。</p>
+      <div class="no-print flex gap-2.5 pt-1">
+        <button type="button" onclick="window.print()"
+          class="flex-1 py-2.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm transition-colors">
+          印刷する
+        </button>
+        <button type="button" onclick="closeMemberQrModal()"
+          class="flex-1 py-2.5 px-4 rounded-xl bg-slate-800 hover:bg-slate-900 text-white font-bold text-sm transition-colors">
+          閉じる
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- トースト通知 -->
+  <div id="toast" class="fixed bottom-5 right-5 z-50 transform translate-y-20 opacity-0 transition-all duration-300 pointer-events-none">
+    <div class="bg-slate-900 text-white px-4 py-3 rounded-xl shadow-lg text-sm font-medium flex items-center gap-2.5">
+      <span id="toast-icon" class="w-2 h-2 rounded-full bg-emerald-400"></span>
+      <span id="toast-message"></span>
+    </div>
+  </div>
+
+  <script>
+    // ==========================================
+    // ★GitHub Pages 公開用 Firebase 設定（3ファイル共通）★
+    // Firebase コンソールの「プロジェクトの設定」からコピーした値を記入してください
+    // 未記入のままの場合はローカルテストモード（同一ブラウザ内連動）で動作します
+    // ==========================================
+    const FIREBASE_CONFIG = {
+      apiKey: "",
+      authDomain: "",
+      databaseURL: "",
+      projectId: "",
+      storageBucket: "",
+      messagingSenderId: "",
+      appId: ""
+    };
+
+    const STORAGE_KEY = 'machinaka_rentacycle_v4_nopii';
+    const PLAN_LABELS = { '4h': '4時間まで', '8h': '8時間まで', 'over8h': '8時間以上' };
+    const ATTR_LABELS = { 'general': '一般', 'junior_high': '中学生' };
+
+    const DEFAULT_STATE = {
+      bikes: [
+        { id: 'e1', name: '電動1号車', type: 'electric', status: 'available', rental: null },
+        { id: 'e2', name: '電動2号車', type: 'electric', status: 'available', rental: null },
+        { id: 'e3', name: '電動3号車', type: 'electric', status: 'available', rental: null },
+        { id: 'n1', name: '普通1号車', type: 'normal',   status: 'available', rental: null },
+        { id: 'n2', name: '普通2号車', type: 'normal',   status: 'available', rental: null },
+      ],
+      members: [
+        { id: 'MC-0001', attribute: 'general' },
+        { id: 'MC-0002', attribute: 'junior_high' }
+      ],
+      pricing: {
+        normal:   { '4h': 200, '8h': 400, 'over8h': 600 },
+        electric: { '4h': 800, '8h': 1600, 'over8h': 2000 },
+        overnight: 1000
+      },
+      history: []
+    };
+
+    let state = loadLocalState();
+    let pendingCheckout = null;
+    let toastTimer = null;
+    let firebaseAuth = null;
+    let firebaseDb = null;
+    let currentUser = null;
+    let staffDataRef = null;
+    const syncChannel = typeof BroadcastChannel !== 'undefined' ? new BroadcastChannel('machinaka_rentacycle_sync') : null;
+
+    function isFirebaseConfigured() {
+      return Boolean(FIREBASE_CONFIG.apiKey && FIREBASE_CONFIG.databaseURL);
+    }
+
+    function normalizeState(raw) {
+      if (!raw || typeof raw !== 'object') return structuredClone(DEFAULT_STATE);
+      const bikesRaw = Array.isArray(raw.bikes) ? raw.bikes : (raw.bikes ? Object.values(raw.bikes) : DEFAULT_STATE.bikes);
+      const membersRaw = Array.isArray(raw.members) ? raw.members : (raw.members ? Object.values(raw.members) : []);
+      const historyRaw = Array.isArray(raw.history) ? raw.history : (raw.history ? Object.values(raw.history) : []);
+
+      return {
+        bikes: bikesRaw.map(b => ({
+          id: b.id,
+          name: b.name,
+          type: b.type,
+          status: b.status === 'rented' && b.rental ? 'rented' : 'available',
+          rental: b.status === 'rented' && b.rental ? b.rental : null
+        })),
+        members: membersRaw,
+        pricing: {
+          normal:   raw.pricing?.normal   || structuredClone(DEFAULT_STATE.pricing.normal),
+          electric: raw.pricing?.electric || structuredClone(DEFAULT_STATE.pricing.electric),
+          overnight: typeof raw.pricing?.overnight === 'number' ? raw.pricing.overnight : DEFAULT_STATE.pricing.overnight
+        },
+        history: historyRaw
+      };
+    }
+
+    function loadLocalState() {
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if (!raw) return structuredClone(DEFAULT_STATE);
+        return normalizeState(JSON.parse(raw));
+      } catch (e) {
+        console.error('LocalStorage読み込みエラー:', e);
+        return structuredClone(DEFAULT_STATE);
+      }
+    }
+
+    function buildPublicPayload() {
+      return {
+        updatedAt: Date.now(),
+        pricing: state.pricing,
+        bikes: state.bikes.map(b => ({
+          id: b.id,
+          name: b.name,
+          type: b.type,
+          status: b.status
+        }))
+      };
+    }
+
+    function saveState() {
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+        if (syncChannel) syncChannel.postMessage({ type: 'state_updated', at: Date.now() });
+
+        if (isFirebaseConfigured() && firebaseDb && currentUser) {
+          const updates = {
+            staff_data: { ...state, updatedAt: Date.now() },
+            public_status: buildPublicPayload()
+          };
+          firebaseDb.ref().update(updates).catch((err) => {
+            console.error('Firebase保存エラー:', err);
+            showToast('クラウド同期の保存に失敗しました', 'error');
+          });
+        }
+      } catch (e) {
+        console.error('LocalStorage保存エラー:', e);
+        showToast('データの保存に失敗しました', 'error');
+      }
+    }
+
+    // ------------------------------------------
+    // Firebase 社員認証 & リアルタイム双方向同期
+    // ------------------------------------------
+    function setSyncStatusUI(mode, emailText = '') {
+      const headerBadge = document.getElementById('sync-mode-badge');
+      const panelBadge = document.getElementById('admin-cloud-status');
+      const emailEl = document.getElementById('admin-logged-in-email');
+
+      if (mode === 'cloud_ok') {
+        if (headerBadge) {
+          headerBadge.textContent = 'クラウド同期ON';
+          headerBadge.className = 'px-2 py-0.5 rounded-full text-[10px] font-bold bg-sky-100 text-sky-800 shrink-0';
+        }
+        if (panelBadge) {
+          panelBadge.textContent = 'クラウド同期ON（全端末リアルタイム）';
+          panelBadge.className = 'text-[11px] font-bold px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-800';
+        }
+        if (emailEl) emailEl.textContent = emailText || 'ログイン済み';
+      } else if (mode === 'cloud_wait') {
+        if (headerBadge) {
+          headerBadge.textContent = '接続中...';
+          headerBadge.className = 'px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 shrink-0';
+        }
+        if (panelBadge) {
+          panelBadge.textContent = '接続中...';
+          panelBadge.className = 'text-[11px] font-bold px-2.5 py-1 rounded-full bg-amber-100 text-amber-800';
+        }
+      } else {
+        if (headerBadge) {
+          headerBadge.textContent = 'ローカルテスト';
+          headerBadge.className = 'px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-600 shrink-0';
+        }
+        if (panelBadge) {
+          panelBadge.textContent = 'ローカルテストモード（同一ブラウザ内）';
+          panelBadge.className = 'text-[11px] font-bold px-2.5 py-1 rounded-full bg-slate-200 text-slate-600';
+        }
+        if (emailEl) emailEl.textContent = '未接続（ローカルテスト）';
+      }
+    }
+
+    function initFirebaseAuthAndSync() {
+      if (!isFirebaseConfigured() || typeof firebase === 'undefined') {
+        setSyncStatusUI('local');
+        document.getElementById('staff-auth-overlay').classList.add('hidden');
+        document.getElementById('app-main').classList.remove('hidden');
+        renderAdminView();
+        return;
+      }
+
+      if (!firebase.apps.length) {
+        firebase.initializeApp(FIREBASE_CONFIG);
+      }
+      firebaseAuth = firebase.auth();
+      firebaseDb = firebase.database();
+
+      document.getElementById('app-main').classList.add('hidden');
+      document.getElementById('staff-auth-overlay').classList.remove('hidden');
+
+      firebaseAuth.onAuthStateChanged((user) => {
+        currentUser = user;
+        if (user) {
+          document.getElementById('staff-auth-overlay').classList.add('hidden');
+          document.getElementById('app-main').classList.remove('hidden');
+          document.getElementById('btn-staff-logout').classList.remove('hidden');
+          setSyncStatusUI('cloud_wait');
+          startStaffRealtimeSync(user.email || '');
+        } else {
+          stopStaffRealtimeSync();
+          document.getElementById('app-main').classList.add('hidden');
+          document.getElementById('btn-staff-logout').classList.add('hidden');
+          document.getElementById('staff-auth-overlay').classList.remove('hidden');
+          setSyncStatusUI('local');
+        }
+      });
+    }
+
+    function startStaffRealtimeSync(userEmail) {
+      if (!firebaseDb) return;
+      stopStaffRealtimeSync();
+      staffDataRef = firebaseDb.ref('staff_data');
+      staffDataRef.on('value', (snapshot) => {
+        setSyncStatusUI('cloud_ok', userEmail);
+        const val = snapshot.val();
+        if (!val) {
+          state = structuredClone(DEFAULT_STATE);
+          saveState();
+        } else {
+          state = normalizeState(val);
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+        }
+        renderAdminView();
+      }, (err) => {
+        console.error('Firebase購読エラー:', err);
+        showToast('同期データの取得に失敗しました（権限を確認してください）', 'error');
+      });
+    }
+
+    function stopStaffRealtimeSync() {
+      if (staffDataRef) {
+        staffDataRef.off();
+        staffDataRef = null;
+      }
+    }
+
+    async function handleStaffLogin(event) {
+      event.preventDefault();
+      const email = document.getElementById('login-email').value.trim();
+      const password = document.getElementById('login-password').value;
+      const errEl = document.getElementById('login-error-msg');
+      const submitBtn = document.getElementById('btn-staff-login-submit');
+
+      errEl.classList.add('hidden');
+      submitBtn.disabled = true;
+      submitBtn.textContent = 'ログイン中...';
+
+      try {
+        await firebaseAuth.signInWithEmailAndPassword(email, password);
+        document.getElementById('staff-login-form').reset();
+        showToast('ログインしました');
+      } catch (err) {
+        errEl.textContent = 'メールアドレスまたはパスワードが正しくありません。';
+        errEl.classList.remove('hidden');
+      } finally {
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'ログインして管理画面を開く';
+      }
+    }
+
+    async function handleStaffLogout() {
+      if (!firebaseAuth) return;
+      try {
+        await firebaseAuth.signOut();
+        showToast('ログアウトしました');
+      } catch (e) {
+        showToast('ログアウトに失敗しました', 'error');
+      }
+    }
+
+    // ------------------------------------------
+    // ユーティリティ & 料金計算
+    // ------------------------------------------
+    function formatDateTime(ts) {
+      const d = new Date(ts);
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      const hh = String(d.getHours()).padStart(2, '0');
+      const mm = String(d.getMinutes()).padStart(2, '0');
+      return `${y}/${m}/${day} ${hh}:${mm}`;
+    }
+
+    function formatTimeOnly(ts) {
+      const d = new Date(ts);
+      return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+    }
+
+    function formatDuration(ms) {
+      const totalSec = Math.max(0, Math.floor(ms / 1000));
+      const hours = Math.floor(totalSec / 3600);
+      const mins = Math.floor((totalSec % 3600) / 60);
+      const secs = totalSec % 60;
+      if (hours > 0) {
+        return `${hours}時間${String(mins).padStart(2, '0')}分${String(secs).padStart(2, '0')}秒`;
+      }
+      return `${mins}分${String(secs).padStart(2, '0')}秒`;
+    }
+
+    function formatYen(amount) {
+      return Number(amount).toLocaleString('ja-JP') + '円';
+    }
+
+    function escapeHtml(str) {
+      return String(str ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+    }
+
+    function getPlanFee(bikeType, planKey, overnight = false) {
+      const table = bikeType === 'electric' ? state.pricing.electric : state.pricing.normal;
+      const base = table[planKey] ?? table['4h'];
+      return base + (overnight ? state.pricing.overnight : 0);
+    }
+
+    function getActualPlanKey(diffMs) {
+      const hours = diffMs / 3600000;
+      if (hours <= 4) return '4h';
+      if (hours <= 8) return '8h';
+      return 'over8h';
+    }
+
+    function calculateRentalStatus(bike, endTime = Date.now(), applyOvernightOverride = null) {
+      const rental = bike.rental;
+      const diffMs = Math.max(0, endTime - rental.startTime);
+      const actualPlanKey = getActualPlanKey(diffMs);
+
+      const hasOvernight = applyOvernightOverride !== null ? applyOvernightOverride : Boolean(rental.overnight);
+      const actualTotalFee = getPlanFee(bike.type, actualPlanKey, hasOvernight);
+      const prepaidFee = rental.prepaidFee ?? 0;
+
+      const planOrder = { '4h': 1, '8h': 2, 'over8h': 3 };
+      const isTimeOver = planOrder[actualPlanKey] > planOrder[rental.planKey];
+      const extraFee = Math.max(0, actualTotalFee - prepaidFee);
+
+      return {
+        diffMs,
+        actualPlanKey,
+        actualPlanLabel: PLAN_LABELS[actualPlanKey],
+        hasOvernight,
+        actualTotalFee,
+        prepaidFee,
+        isTimeOver,
+        extraFee
+      };
+    }
+
+    function showToast(message, type = 'success') {
+      const toast = document.getElementById('toast');
+      document.getElementById('toast-message').textContent = message;
+      document.getElementById('toast-icon').className = `w-2.5 h-2.5 rounded-full ${type === 'error' ? 'bg-rose-400' : 'bg-emerald-400'}`;
+      toast.classList.remove('translate-y-20', 'opacity-0');
+      toast.classList.add('translate-y-0', 'opacity-100');
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => {
+        toast.classList.remove('translate-y-0', 'opacity-100');
+        toast.classList.add('translate-y-20', 'opacity-0');
+      }, 3000);
+    }
+
+    // ------------------------------------------
+    // 管理画面描画
+    // ------------------------------------------
+    function renderAdminView() {
+      const availCount = state.bikes.filter(b => b.status === 'available').length;
+      const rentedCount = state.bikes.length - availCount;
+
+      document.getElementById('admin-count-avail').textContent = `貸出可: ${availCount}台`;
+      document.getElementById('admin-count-rented').textContent = `貸出中: ${rentedCount}台`;
+
+      const listEl = document.getElementById('admin-bike-list');
+      const now = Date.now();
+
+      listEl.innerHTML = state.bikes.map(bike => {
+        const isRented = bike.status === 'rented' && bike.rental;
+        const isElectric = bike.type === 'electric';
+        const typeBadge = isElectric
+          ? '<span class="px-2 py-0.5 rounded-md text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200/60">電動</span>'
+          : '<span class="px-2 py-0.5 rounded-md text-[11px] font-semibold bg-sky-50 text-sky-700 border border-sky-200/60">普通</span>';
+
+        if (!isRented) {
+          return `
+            <div class="rounded-xl p-4 border border-slate-200 bg-slate-50/50 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div class="flex items-center gap-3">
+                <span class="w-2.5 h-2.5 rounded-full bg-emerald-500 shrink-0"></span>
+                <div class="flex items-center gap-2">
+                  <span class="font-bold text-slate-900">${escapeHtml(bike.name)}</span>
+                  ${typeBadge}
+                </div>
+                <span class="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800">貸出可</span>
+              </div>
+            </div>
+          `;
+        }
+
+        const calc = calculateRentalStatus(bike, now);
+        const overBadge = calc.isTimeOver
+          ? `<span class="text-xs font-bold px-2.5 py-0.5 rounded-full bg-rose-100 text-rose-700 border border-rose-200">予定超過（+${formatYen(calc.extraFee)}）</span>`
+          : `<span class="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800">プラン内</span>`;
+
+        return `
+          <div class="rounded-xl p-4 border-2 ${calc.isTimeOver ? 'border-rose-300 bg-rose-50/30' : 'border-amber-200 bg-amber-50/30'} space-y-3">
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div class="flex flex-wrap items-center gap-2">
+                <span class="w-2.5 h-2.5 rounded-full ${calc.isTimeOver ? 'bg-rose-500' : 'bg-amber-500'} animate-pulse shrink-0"></span>
+                <span class="font-bold text-slate-900 text-base">${escapeHtml(bike.name)}</span>
+                ${typeBadge}
+                <span class="text-xs font-bold px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-800">貸出中</span>
+                <span data-over-badge="${bike.id}">${overBadge}</span>
+              </div>
+              <div class="flex items-center gap-2">
+                <button type="button" onclick="simulateOneHourLater('${bike.id}')" title="料金計算テスト用：経過時間を1時間進めます"
+                  class="px-2.5 py-1.5 rounded-lg bg-white border border-slate-200 hover:bg-slate-100 text-slate-600 text-xs font-medium transition-colors">
+                  +1hテスト
+                </button>
+                <button type="button" onclick="openCheckoutModal('${bike.id}')"
+                  class="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white text-xs sm:text-sm font-bold shadow-xs transition-colors">
+                  返却・精算
+                </button>
+              </div>
+            </div>
+
+            <div class="grid grid-cols-2 lg:grid-cols-5 gap-2.5 pt-2 border-t border-slate-200/70 text-xs sm:text-sm">
+              <div class="bg-white rounded-lg p-2.5 border border-slate-100">
+                <div class="text-[11px] text-slate-400">顧客番号・区分</div>
+                <div class="font-mono font-extrabold text-emerald-700 text-sm sm:text-base mt-0.5 truncate">${escapeHtml(bike.rental.customerId)}</div>
+                <div class="mt-1">
+                  <span class="inline-block px-2 py-0.5 rounded text-[11px] font-semibold ${bike.rental.attribute === 'junior_high' ? 'bg-sky-100 text-sky-800' : 'bg-slate-100 text-slate-700'}">
+                    ${ATTR_LABELS[bike.rental.attribute] || '一般'}
+                  </span>
+                </div>
+              </div>
+              <div class="bg-white rounded-lg p-2.5 border border-slate-100">
+                <div class="text-[11px] text-slate-400">申込プラン</div>
+                <div class="font-bold text-slate-800 mt-0.5">${PLAN_LABELS[bike.rental.planKey]}</div>
+                <div class="text-[11px] text-slate-500">${bike.rental.overnight ? '夜間利用あり' : '当日返却'}</div>
+              </div>
+              <div class="bg-white rounded-lg p-2.5 border border-slate-100">
+                <div class="text-[11px] text-slate-400">前払い済金額</div>
+                <div class="font-extrabold text-emerald-700 text-base tabular-nums mt-0.5">${formatYen(calc.prepaidFee)}</div>
+                <div class="text-[11px] text-slate-400">開始 ${formatTimeOnly(bike.rental.startTime)}</div>
+              </div>
+              <div class="bg-white rounded-lg p-2.5 border border-slate-100">
+                <div class="text-[11px] text-slate-400">経過時間</div>
+                <div class="font-bold text-amber-700 tabular-nums mt-0.5" data-elapsed-bike="${bike.id}">${formatDuration(calc.diffMs)}</div>
+                <div class="text-[11px] text-slate-400" data-actual-plan="${bike.id}">実区分: ${calc.actualPlanLabel}</div>
+              </div>
+              <div class="bg-white rounded-lg p-2.5 border border-slate-100 col-span-2 lg:col-span-1">
+                <div class="text-[11px] text-slate-400">現在の追加差額</div>
+                <div class="font-extrabold text-base tabular-nums mt-0.5 ${calc.extraFee > 0 ? 'text-rose-600' : 'text-slate-700'}" data-extra-bike="${bike.id}">
+                  ${calc.extraFee > 0 ? '+' + formatYen(calc.extraFee) : '0円'}
+                </div>
+                <div class="text-[11px] text-slate-400">実料金 ${formatYen(calc.actualTotalFee)}</div>
+              </div>
+            </div>
+          </div>
+        `;
+      }).join('');
+
+      const syncInput = (id, val) => {
+        const el = document.getElementById(id);
+        if (el && document.activeElement !== el) el.value = val;
+      };
+      syncInput('price-normal-4h', state.pricing.normal['4h']);
+      syncInput('price-normal-8h', state.pricing.normal['8h']);
+      syncInput('price-normal-over8h', state.pricing.normal['over8h']);
+      syncInput('price-electric-4h', state.pricing.electric['4h']);
+      syncInput('price-electric-8h', state.pricing.electric['8h']);
+      syncInput('price-electric-over8h', state.pricing.electric['over8h']);
+      syncInput('price-overnight', state.pricing.overnight);
+
+      renderMembersList();
+      renderHistory();
+    }
+
+    // ------------------------------------------
+    // 会員番号管理
+    // ------------------------------------------
+    function handleAddMember(event) {
+      event.preventDefault();
+      const id = document.getElementById('new-member-id').value.trim().toUpperCase();
+      const attribute = document.getElementById('new-member-attr').value;
+
+      if (!id) {
+        showToast('顧客番号を入力してください', 'error');
+        return;
+      }
+      if (state.members.some(m => m.id.toUpperCase() === id)) {
+        showToast(`顧客番号「${id}」はすでに登録されています`, 'error');
+        return;
+      }
+
+      state.members.push({ id, attribute });
+      saveState();
+
+      document.getElementById('member-add-form').reset();
+      renderMembersList();
+      showToast(`会員番号 ${id}（${ATTR_LABELS[attribute]}）を登録しました`);
+    }
+
+    function renderMembersList() {
+      const listEl = document.getElementById('admin-member-list');
+      const countEl = document.getElementById('admin-member-count');
+      countEl.textContent = `登録数: ${state.members.length}件`;
+
+      if (state.members.length === 0) {
+        listEl.innerHTML = `<div class="py-6 text-center text-slate-400 text-xs bg-slate-50 rounded-xl border border-dashed border-slate-200">登録されている会員番号はありません。</div>`;
+        return;
+      }
+
+      listEl.innerHTML = state.members.map(m => {
+        const isJunior = m.attribute === 'junior_high';
+        return `
+          <div class="rounded-xl p-3.5 border border-slate-200 bg-white flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 text-xs sm:text-sm">
+            <div class="flex flex-wrap items-center gap-2">
+              <span class="px-2.5 py-0.5 rounded-md font-mono font-bold bg-emerald-50 text-emerald-800 border border-emerald-200">${escapeHtml(m.id)}</span>
+              <span class="px-2.5 py-0.5 rounded-full text-[11px] font-semibold ${isJunior ? 'bg-sky-100 text-sky-800' : 'bg-slate-100 text-slate-700'}">
+                ${isJunior ? '中学生（普通自転車のみ）' : '一般（高校生以上）'}
+              </span>
+            </div>
+            <div class="flex items-center gap-2 shrink-0">
+              <button type="button" onclick="openMemberQrModal('${escapeHtml(m.id)}')"
+                class="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-900 text-white text-xs font-semibold transition-colors">
+                会員QR表示・印刷
+              </button>
+              <button type="button" onclick="deleteMember('${escapeHtml(m.id)}')"
+                class="px-2.5 py-1.5 rounded-lg border border-slate-200 hover:bg-rose-50 hover:text-rose-600 hover:border-rose-200 text-slate-500 text-xs font-semibold transition-colors">
+                削除
+              </button>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function deleteMember(memberId) {
+      const target = state.members.find(m => m.id === memberId);
+      if (!target) return;
+      const modal = document.getElementById('confirm-modal');
+      document.getElementById('confirm-modal-title').textContent = '会員番号の削除';
+      document.getElementById('confirm-modal-msg').textContent = `会員番号「${target.id}（${ATTR_LABELS[target.attribute]}）」を削除します。よろしいですか？`;
+      document.getElementById('confirm-modal-ok').onclick = () => {
+        state.members = state.members.filter(m => m.id !== memberId);
+        saveState();
+        closeConfirmModal();
+        renderMembersList();
+        showToast(`会員番号 ${memberId} を削除しました`);
+      };
+      modal.classList.remove('hidden');
+    }
+
+    function openMemberQrModal(memberId) {
+      const member = state.members.find(m => m.id === memberId);
+      if (!member) return;
+
+      document.getElementById('member-qr-id').textContent = member.id;
+      document.getElementById('member-qr-attr').textContent =
+        member.attribute === 'junior_high' ? '区分：中学生（普通自転車のみ）' : '区分：一般（高校生以上）';
+
+      const canvasEl = document.getElementById('member-qr-canvas');
+      canvasEl.innerHTML = '';
+
+      try {
+        if (typeof QRCode !== 'undefined') {
+          new QRCode(canvasEl, {
+            text: member.id,
+            width: 170,
+            height: 170,
+            colorDark: '#0f172a',
+            colorLight: '#ffffff',
+            correctLevel: QRCode.CorrectLevel.M
+          });
+        } else {
+          canvasEl.innerHTML = `<div class="text-xs text-slate-400">QR生成ライブラリ未読込</div>`;
+        }
+      } catch (e) {
+        canvasEl.innerHTML = `<div class="text-xs text-slate-400">QRコード生成エラー</div>`;
+      }
+
+      document.getElementById('member-qr-modal').classList.remove('hidden');
+    }
+
+    function closeMemberQrModal() {
+      document.getElementById('member-qr-modal').classList.add('hidden');
+    }
+
+    // ------------------------------------------
+    // 利用履歴 & タイマー
+    // ------------------------------------------
+    function renderHistory() {
+      const emptyEl = document.getElementById('history-empty');
+      const containerEl = document.getElementById('history-container');
+      const totalSalesEl = document.getElementById('history-total-sales');
+      const clearBtn = document.getElementById('btn-clear-history');
+
+      const totalSales = state.history.reduce((sum, h) => sum + (Number(h.totalFee) || 0), 0);
+      totalSalesEl.textContent = formatYen(totalSales);
+
+      if (state.history.length === 0) {
+        emptyEl.classList.remove('hidden');
+        containerEl.classList.add('hidden');
+        clearBtn.classList.add('hidden');
+        return;
+      }
+
+      emptyEl.classList.add('hidden');
+      containerEl.classList.remove('hidden');
+      clearBtn.classList.remove('hidden');
+
+      containerEl.innerHTML = state.history.map(item => `
+        <div class="rounded-xl p-3.5 border border-slate-200 bg-slate-50/60 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs sm:text-sm">
+          <div class="space-y-0.5">
+            <div class="flex flex-wrap items-center gap-2">
+              <span class="font-bold text-slate-900">${escapeHtml(item.bikeName)}</span>
+              <span class="px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 font-mono text-[11px] font-bold border border-emerald-200/70">${escapeHtml(item.customerId)}</span>
+              <span class="text-[11px] px-2 py-0.5 rounded font-semibold ${item.attribute === 'junior_high' ? 'bg-sky-100 text-sky-800' : 'bg-slate-200/80 text-slate-700'}">
+                ${ATTR_LABELS[item.attribute] || '一般'}
+              </span>
+            </div>
+            <div class="text-[11px] text-slate-500 tabular-nums">
+              ${formatDateTime(item.startTime)} 〜 ${formatDateTime(item.endTime)}（実利用 ${formatDuration(item.diffMs)}）
+            </div>
+          </div>
+          <div class="sm:text-right flex sm:flex-col items-center sm:items-end justify-between gap-1 pt-1 sm:pt-0 border-t sm:border-t-0 border-slate-200/70">
+            <div class="font-extrabold text-slate-900 tabular-nums">${formatYen(item.totalFee)}</div>
+            <div class="text-[11px] text-slate-500">
+              前払 ${formatYen(item.prepaidFee)}${item.extraFee > 0 ? ` ＋ 追加 ${formatYen(item.extraFee)}` : ''}
+            </div>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    function updateRealtimeTimers() {
+      const now = Date.now();
+      const d = new Date(now);
+      document.getElementById('header-clock').textContent =
+        `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}:${String(d.getSeconds()).padStart(2, '0')}`;
+      document.getElementById('header-date').textContent =
+        `${d.getFullYear()}/${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')}`;
+
+      state.bikes.forEach(bike => {
+        if (bike.status === 'rented' && bike.rental) {
+          const calc = calculateRentalStatus(bike, now);
+          const elapsedEl = document.querySelector(`[data-elapsed-bike="${bike.id}"]`);
+          const extraEl = document.querySelector(`[data-extra-bike="${bike.id}"]`);
+          const actualPlanEl = document.querySelector(`[data-actual-plan="${bike.id}"]`);
+          if (elapsedEl) elapsedEl.textContent = formatDuration(calc.diffMs);
+          if (actualPlanEl) actualPlanEl.textContent = `実区分: ${calc.actualPlanLabel}`;
+          if (extraEl) {
+            extraEl.textContent = calc.extraFee > 0 ? '+' + formatYen(calc.extraFee) : '0円';
+            extraEl.className = `font-extrabold text-base tabular-nums mt-0.5 ${calc.extraFee > 0 ? 'text-rose-600' : 'text-slate-700'}`;
+          }
+        }
+      });
+    }
+
+    function simulateOneHourLater(bikeId) {
+      const bike = state.bikes.find(b => b.id === bikeId);
+      if (!bike || !bike.rental) return;
+      bike.rental.startTime -= 3600000;
+      saveState();
+      renderAdminView();
+      showToast(`${bike.name}の経過時間を1時間進めました（テスト）`);
+    }
+
+    // ------------------------------------------
+    // 返却・精算モーダル
+    // ------------------------------------------
+    function openCheckoutModal(bikeId) {
+      const bike = state.bikes.find(b => b.id === bikeId);
+      if (!bike || bike.status !== 'rented' || !bike.rental) return;
+
+      pendingCheckout = {
+        bikeId: bike.id,
+        endTime: Date.now(),
+        applyOvernight: Boolean(bike.rental.overnight)
+      };
+
+      renderCheckoutModalContent();
+      document.getElementById('checkout-modal').classList.remove('hidden');
+    }
+
+    function renderCheckoutModalContent() {
+      if (!pendingCheckout) return;
+      const bike = state.bikes.find(b => b.id === pendingCheckout.bikeId);
+      if (!bike || !bike.rental) return;
+
+      const calc = calculateRentalStatus(bike, pendingCheckout.endTime, pendingCheckout.applyOvernight);
+
+      document.getElementById('checkout-modal-body').innerHTML = `
+        <div class="bg-slate-50 rounded-xl p-4 space-y-2 border border-slate-100">
+          <div class="flex justify-between">
+            <span class="text-slate-500">車両</span>
+            <span class="font-bold text-slate-900">${escapeHtml(bike.name)}（${bike.type === 'electric' ? '電動' : '普通'}）</span>
+          </div>
+          <div class="flex justify-between">
+            <span class="text-slate-500">顧客番号</span>
+            <span class="font-mono font-bold text-emerald-700">${escapeHtml(bike.rental.customerId)}</span>
+          </div>
+          <div class="flex justify-between">
+            <span class="text-slate-500">利用区分</span>
+            <span class="font-semibold text-slate-800">${ATTR_LABELS[bike.rental.attribute] || '一般'}</span>
+          </div>
+          <div class="flex justify-between">
+            <span class="text-slate-500">申込プラン</span>
+            <span class="font-semibold text-slate-800">${PLAN_LABELS[bike.rental.planKey]}${bike.rental.overnight ? '＋夜間' : ''}</span>
+          </div>
+          <div class="flex justify-between">
+            <span class="text-slate-500">貸出〜返却</span>
+            <span class="font-medium text-slate-700 tabular-nums text-xs">${formatTimeOnly(bike.rental.startTime)} 〜 ${formatTimeOnly(pendingCheckout.endTime)}</span>
+          </div>
+          <div class="flex justify-between">
+            <span class="text-slate-500">実利用時間</span>
+            <span class="font-bold text-slate-800">${formatDuration(calc.diffMs)}（${calc.actualPlanLabel}）</span>
+          </div>
+        </div>
+
+        <label class="flex items-center justify-between p-3 rounded-xl border border-slate-200 bg-white cursor-pointer">
+          <span class="text-xs font-semibold text-slate-700">夜間料金（+${formatYen(state.pricing.overnight)}）を適用する</span>
+          <input type="checkbox" ${pendingCheckout.applyOvernight ? 'checked' : ''} onchange="toggleCheckoutOvernight(this.checked)"
+            class="w-4 h-4 rounded text-emerald-600 focus:ring-emerald-500 border-slate-300">
+        </label>
+
+        <div class="rounded-xl p-4 border ${calc.extraFee > 0 ? 'bg-rose-50 border-rose-200' : 'bg-emerald-50 border-emerald-200'} space-y-2">
+          <div class="flex justify-between text-xs text-slate-600">
+            <span>実利用に基づく料金</span>
+            <span class="font-bold tabular-nums">${formatYen(calc.actualTotalFee)}</span>
+          </div>
+          <div class="flex justify-between text-xs text-slate-600">
+            <span>前払い済金額</span>
+            <span class="font-bold tabular-nums">-${formatYen(calc.prepaidFee)}</span>
+          </div>
+          <div class="pt-2 border-t ${calc.extraFee > 0 ? 'border-rose-200' : 'border-emerald-200'} flex items-center justify-between">
+            <div>
+              <div class="text-xs font-bold ${calc.extraFee > 0 ? 'text-rose-800' : 'text-emerald-800'}">追加請求額（差額）</div>
+              <div class="text-[11px] text-slate-500">※途中返却による返金なし</div>
+            </div>
+            <div class="text-2xl font-extrabold tabular-nums ${calc.extraFee > 0 ? 'text-rose-600' : 'text-emerald-700'}">
+              ${formatYen(calc.extraFee)}
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    function toggleCheckoutOvernight(checked) {
+      if (!pendingCheckout) return;
+      pendingCheckout.applyOvernight = checked;
+      renderCheckoutModalContent();
+    }
+
+    function closeCheckoutModal() {
+      pendingCheckout = null;
+      document.getElementById('checkout-modal').classList.add('hidden');
+    }
+
+    function confirmCheckout() {
+      if (!pendingCheckout) return;
+
+      const bike = state.bikes.find(b => b.id === pendingCheckout.bikeId);
+      if (!bike || !bike.rental) return;
+
+      const calc = calculateRentalStatus(bike, pendingCheckout.endTime, pendingCheckout.applyOvernight);
+      const totalCollected = calc.prepaidFee + calc.extraFee;
+
+      state.history.unshift({
+        id: 'hist_' + Date.now(),
+        bikeId: bike.id,
+        bikeName: bike.name,
+        bikeType: bike.type,
+        customerId: bike.rental.customerId,
+        attribute: bike.rental.attribute || 'general',
+        planKey: bike.rental.planKey,
+        overnight: calc.hasOvernight,
+        startTime: bike.rental.startTime,
+        endTime: pendingCheckout.endTime,
+        diffMs: calc.diffMs,
+        prepaidFee: calc.prepaidFee,
+        extraFee: calc.extraFee,
+        totalFee: totalCollected
+      });
+
+      bike.status = 'available';
+      bike.rental = null;
+
+      saveState();
+      const finishedName = bike.name;
+      closeCheckoutModal();
+      renderAdminView();
+      showToast(`${finishedName}の返却を完了しました`);
+    }
+
+    // ------------------------------------------
+    // 設定・確認モーダル
+    // ------------------------------------------
+    function handlePricingSave(event) {
+      event.preventDefault();
+      const readVal = id => parseInt(document.getElementById(id).value, 10);
+
+      const n4 = readVal('price-normal-4h');
+      const n8 = readVal('price-normal-8h');
+      const nOver = readVal('price-normal-over8h');
+      const e4 = readVal('price-electric-4h');
+      const e8 = readVal('price-electric-8h');
+      const eOver = readVal('price-electric-over8h');
+      const overnight = readVal('price-overnight');
+
+      if ([n4, n8, nOver, e4, e8, eOver, overnight].some(v => isNaN(v) || v < 0)) {
+        showToast('0以上の正しい数値を入力してください', 'error');
+        return;
+      }
+
+      state.pricing = {
+        normal:   { '4h': n4, '8h': n8, 'over8h': nOver },
+        electric: { '4h': e4, '8h': e8, 'over8h': eOver },
+        overnight
+      };
+
+      saveState();
+      renderAdminView();
+      showToast('料金設定を保存しました');
+    }
+
+    function openClearHistoryModal() {
+      const modal = document.getElementById('confirm-modal');
+      document.getElementById('confirm-modal-title').textContent = '利用履歴のクリア';
+      document.getElementById('confirm-modal-msg').textContent = '記録されているすべての利用履歴を削除します。よろしいですか？';
+      document.getElementById('confirm-modal-ok').onclick = () => {
+        state.history = [];
+        saveState();
+        closeConfirmModal();
+        renderAdminView();
+        showToast('利用履歴をクリアしました');
+      };
+      modal.classList.remove('hidden');
+    }
+
+    function openResetAllModal() {
+      const modal = document.getElementById('confirm-modal');
+      document.getElementById('confirm-modal-title').textContent = '全データの初期化（リセット）';
+      document.getElementById('confirm-modal-msg').textContent = 'すべての車両ステータス・貸出中データ・料金設定・利用履歴を初期状態に戻します。よろしいですか？';
+      document.getElementById('confirm-modal-ok').onclick = () => {
+        state = structuredClone(DEFAULT_STATE);
+        saveState();
+        closeConfirmModal();
+        renderAdminView();
+        showToast('すべてのデータを初期状態にリセットしました');
+      };
+      modal.classList.remove('hidden');
+    }
+
+    function closeConfirmModal() {
+      document.getElementById('confirm-modal').classList.add('hidden');
+    }
+
+    // 同一ブラウザ内での即時連動（ローカルテスト時）
+    window.addEventListener('storage', (e) => {
+      if (!isFirebaseConfigured() && e.key === STORAGE_KEY) {
+        state = loadLocalState();
+        renderAdminView();
+      }
+    });
+
+    if (syncChannel) {
+      syncChannel.onmessage = () => {
+        if (!isFirebaseConfigured()) {
+          state = loadLocalState();
+          renderAdminView();
+        }
+      };
+    }
+
+    window.addEventListener('DOMContentLoaded', () => {
+      updateRealtimeTimers();
+      setInterval(updateRealtimeTimers, 1000);
+      initFirebaseAuthAndSync();
+    });
+  </script>
+</body>
+</html>
